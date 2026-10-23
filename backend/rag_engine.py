@@ -12,7 +12,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent / "data" / "patients"
+import db
 
 STOPWORDS = set("""
 a an the is are was were be been am do does did have has had i me my mine you your it its of to in on at for
@@ -174,22 +174,26 @@ class _BM25:
 
 
 class PatientRecordStore:
-    def __init__(self, data_dir: Path = DATA_DIR):
-        self.data_dir = Path(data_dir)
+    """Reads patient records from the SQLite database (db.py) — the primary data source."""
+
+    def __init__(self):
         self.records: dict[str, dict] = {}
         self.chunks: dict[str, list[Chunk]] = {}
         self.index: dict[str, _BM25] = {}
+        self.db_mtime = 0.0
         self.reload()
 
     def reload(self):
         self.records.clear(); self.chunks.clear(); self.index.clear()
-        for f in sorted(self.data_dir.glob("*.json")):
-            rec = json.loads(f.read_text(encoding="utf-8"))
-            pid = rec["patient_id"]
+        self.db_mtime = db.db_mtime()
+        for pid, rec in db.load_all_records().items():
             self.records[pid] = rec
             self.chunks[pid] = _build_chunks(rec)
             self.index[pid] = _BM25([tokenize(c.text + " " + c.section) for c in self.chunks[pid]])
-        print(f"[RAG] Loaded {len(self.records)} patient record(s): {list(self.records)}")
+        if self.records:
+            print(f"[RAG] Loaded {len(self.records)} patient record(s) from SQLite: {list(self.records)}")
+        else:
+            print("[RAG] WARNING: database has no patients. Run: python pdf_ingest.py <file.pdf>")
 
     def has_patient(self, pid: str) -> bool:
         return pid in self.records
@@ -218,9 +222,14 @@ class PatientRecordStore:
 _store: PatientRecordStore | None = None
 
 def get_store() -> PatientRecordStore:
+    """Shared store. Reloads automatically when the database file changes,
+    so a newly ingested PDF is used without restarting the server."""
     global _store
     if _store is None:
         _store = PatientRecordStore()
+    elif db.db_mtime() != _store.db_mtime:
+        print("[RAG] Database changed — reloading records")
+        _store.reload()
     return _store
 
 
