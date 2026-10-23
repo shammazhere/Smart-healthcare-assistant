@@ -1,0 +1,175 @@
+{
+  "profile": {
+    "name": "Mohammed Imran",
+    "age": 72,
+    "sex": "Male",
+    "blood_group": "O+",
+    "height_cm": "170 cm",
+    "weight_kg": "78 kg",
+    "language": "English, Urdu, Kannada",
+    "primary_doctor": "Dr. Farah Siddiqui (Cardiology)",
+    "emergency_contact": {
+      "name": "Salma Imran",
+      "relation": "Wife",
+      "phone": "+91 99020 44556"
+    }
+  },
+  "allergies": [
+    {
+      "substance": "Aspirin",
+      "reaction": "Stomach bleeding",
+      "severity": "Severe"
+    },
+    {
+      "substance": "Iodine contrast dye",
+      "reaction": "Hives",
+      "severity": "Moderate"
+    }
+  ],
+  "conditions": [
+    {
+      "name": "Coronary Artery Disease (stent placed 2022)",
+      "since": "2022",
+      "status": "Stable"
+    },
+    {
+      "name": "Atrial Fibrillation",
+      "since": "2023",
+      "status": "Rate controlled, on blood thinner"
+    },
+    {
+      "name": "Benign Prostatic Hyperplasia",
+      "since": "2019",
+      "status": "Managed with medication"
+    }
+  ],
+  "surgeries": [
+    {
+      "procedure": "Coronary angioplasty with stent",
+      "date": "2022-08-03",
+      "hospital": "Heartcare Institute",
+      "notes": "One drug-eluting stent in the LAD artery."
+    },
+    {
+      "procedure": "Cataract surgery (right eye)",
+      "date": "2021-02-20",
+      "hospital": "Vision Care Centre",
+      "notes": "Good visual recovery."
+    }
+  ],
+  "medications": [
+    {
+      "name": "Warfarin",
+      "dose": "3 mg",
+      "frequency": "Once daily, evening",
+      "purpose": "Blood thinner for atrial fibrillation"
+    },
+    {
+      "name": "Metoprolol",
+      "dose": "50 mg",
+      "frequency": "Twice daily, morning and evening",
+      "purpose": "Heart rate and blood pressure"
+    },
+    {
+      "name": "Rosuvastatin",
+      "dose": "10 mg",
+      "frequency": "Once daily, at bedtime",
+      "purpose": "Cholesterol"
+    },
+    {
+      "name": "Tamsulosin",
+      "dose": "0.4 mg",
+      "frequency": "Once daily, after dinner",
+      "purpose": "Prostate symptoms"
+    },
+    {
+      "name": "Pantoprazole",
+      "dose": "40 mg",
+      "frequency": "Once daily, before breakfast",
+      "purpose": "Stomach protection"
+    }
+  ],
+  "lab_results": [
+    {
+      "date": "2026-10-05",
+      "test": "INR",
+      "value": "2.4",
+      "reference": "2.0 - 3.0 (target)",
+      "note": "In target range"
+    },
+    {
+      "date": "2026-10-05",
+      "test": "LDL Cholesterol",
+      "value": "68 mg/dL",
+      "reference": "below 70 mg/dL",
+      "note": "At goal"
+    },
+    {
+      "date": "2026-10-05",
+      "test": "Creatinine",
+      "value": "1.1 mg/dL",
+      "reference": "0.7 - 1.3 mg/dL",
+      "note": "Normal"
+    },
+    {
+      "date": "2026-07-08",
+      "test": "INR",
+      "value": "3.4",
+      "reference": "2.0 - 3.0 (target)",
+      "note": "Slightly high, warfarin dose reduced"
+    }
+  ],
+  "vitals_baseline": {
+    "resting_heart_rate_bpm": "70 bpm",
+    "usual_blood_pressure": "128/80 mmHg",
+    "usual_spo2_percent": "96%",
+    "note": "Pulse may feel irregular because of atrial fibrillation."
+  },
+  "visits": [
+    {
+      "date": "2026-10-06",
+      "doctor": "Dr. Farah Siddiqui",
+      "reason": "Cardiology follow-up",
+      "summary": "INR and cholesterol at goal. No chest pain. Continue all medicines."
+    },
+    {
+      "date": "2026-04-22",
+      "doctor": "Dr. Anand Rao (Urology)",
+      "reason": "Urinary frequency",
+      "summary": "Prostate mildly enlarged. Tamsulosin continued."
+    }
+  ],
+  "appointments": [
+    {
+      "date": "2026-11-09",
+      "time": "09:30",
+      "doctor": "Dr. Farah Siddiqui",
+      "reason": "INR check and heart review",
+      "location": "Heartcare Institute, OPD 3"
+    },
+    {
+      "date": "2027-01-14",
+      "time": "10:15",
+      "doctor": "Dr. Anand Rao (Urology)",
+      "reason": "Prostate review",
+      "location": "City General Hospital, OPD"
+    }
+  ],
+  "care_instructions": [
+    "Take warfarin at the same time every evening and never skip or double a dose.",
+    "Do not take aspirin, ibuprofen or other NSAID painkillers. Ask the doctor first before any new medicine.",
+    "Keep green leafy vegetable intake steady from day to day because it affects warfarin.",
+    "Go to emergency care for chest pain, black stools, or any bleeding that does not stop."
+  ],
+  "doctor_notes": [
+    {
+      "date": "2026-10-06",
+      "note": "INR every 4 weeks. Continue low-salt diet and daily 30 minute walk."
+    },
+    {
+      "date": "2026-04-22",
+      "note": "Avoid decongestant cold medicines because they can worsen urinary symptoms."
+    }
+  ],
+  "patient_id": "patient_003"
+}

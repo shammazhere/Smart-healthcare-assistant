@@ -1,6 +1,6 @@
 # ============================================================
 # llm_agent.py — Healthcare agent: Groq LLM + patient-record RAG
-#   Flow: question -> retrieve patient records -> Groq -> short spoken reply
+#   Flow: question -> retrieve patient records (SQLite) -> Groq -> short spoken reply
 #   Groq exposes an OpenAI-compatible API, so we use the openai SDK.
 # ============================================================
 import os
@@ -10,7 +10,7 @@ from datetime import date
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
-from rag_engine import build_context, get_store
+from rag_engine import build_context_with_sources, get_store
 
 # override=True so the .env file wins over any old system environment variable
 load_dotenv(override=True)
@@ -31,6 +31,7 @@ Rules:
 - Never diagnose and never change medicine doses. For medical decisions say you are a robot, not a doctor, and suggest the doctor.
 - Always respect the patient's allergies and conditions. Never suggest anything that conflicts with them.
 - Emergencies (chest pain, trouble breathing, fainting, severe bleeding): tell them to call emergency services or press the call button right now.
+- The question comes from speech recognition and may contain small mistakes; use the records to work out what was meant.
 - Today's date is {today}. Use it to decide which appointments are upcoming.
 """.strip()
 
@@ -50,6 +51,10 @@ def load_llm():
     print(f"[LLM] Groq client ready — model: {model}, endpoint: {base_url}")
 
 
+def reset_history(patient_id: str | None = None):
+    _history[patient_id or DEFAULT_PATIENT_ID].clear()
+
+
 def get_live_vitals(patient_id: str) -> str | None:
     """
     PLACEHOLDER (sensors on hold). Later, return something like
@@ -58,16 +63,19 @@ def get_live_vitals(patient_id: str) -> str | None:
     return None
 
 
-async def generate_response(user_text: str, patient_id: str | None = None) -> str:
+async def generate_response_with_sources(user_text: str,
+                                         patient_id: str | None = None) -> tuple[str, list[dict]]:
+    """Returns (reply, sources). `sources` are the record snippets the answer was based on."""
     if not user_text:
-        return "I didn't catch that. Could you please repeat?"
+        return "I didn't catch that. Could you please repeat?", []
     if _client is None:
         raise RuntimeError("LLM client not loaded. Call load_llm() first.")
 
     pid = patient_id or DEFAULT_PATIENT_ID
     model = os.getenv("LLM_MODEL", DEFAULT_MODEL)
 
-    context = build_context(pid, user_text, k=5)
+    context, hits = build_context_with_sources(pid, user_text, k=5)
+    sources = [{"section": c.section, "text": c.text} for c in hits]
     live = get_live_vitals(pid)
     if live:
         context += f"\n\nLIVE SENSOR DATA:\n{live}"
@@ -91,12 +99,17 @@ async def generate_response(user_text: str, patient_id: str | None = None) -> st
         )
         reply = (resp.choices[0].message.content or "").strip()
         if not reply:
-            return "Sorry, I didn't get that. Could you ask again?"
+            return "Sorry, I didn't get that. Could you ask again?", []
 
         _history[pid].append({"role": "user", "content": user_text})
         _history[pid].append({"role": "assistant", "content": reply})
         print(f"[LLM] Response: '{reply}'")
-        return reply
+        return reply, sources
     except Exception as e:
         print(f"[LLM] Error: {e}")
-        return "I'm having trouble thinking right now. Please try again shortly."
+        return "I'm having trouble thinking right now. Please try again shortly.", []
+
+
+async def generate_response(user_text: str, patient_id: str | None = None) -> str:
+    reply, _ = await generate_response_with_sources(user_text, patient_id)
+    return reply

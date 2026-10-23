@@ -1,16 +1,15 @@
 # ============================================================
 # rag_engine.py — Retrieval over patient health records
-#   * Loads patient JSON files from data/patients/
+#   * Loads patient records from the SQLite database (db.py)
 #   * Turns each record into a small text "chunk"
 #   * Retrieves the most relevant chunks for a question (BM25)
 #   * No heavy dependencies: pure Python, works offline
 # ============================================================
-import json
 import math
 import re
 from collections import Counter
 from dataclasses import dataclass
-from pathlib import Path
+from datetime import date
 
 import db
 
@@ -198,6 +197,52 @@ class PatientRecordStore:
     def has_patient(self, pid: str) -> bool:
         return pid in self.records
 
+    def patient_list(self) -> list[dict]:
+        return [{"id": pid, "name": rec["profile"].get("name") or pid} for pid, rec in self.records.items()]
+
+    def vocabulary_hint(self, pid: str) -> str:
+        """Names the speech-to-text should expect (medicines, conditions, doctors)."""
+        rec = self.records.get(pid)
+        if not rec:
+            return ""
+        meds = [m["name"] for m in rec.get("medications", []) if m.get("name")]
+        conds = [c["name"] for c in rec.get("conditions", []) if c.get("name")]
+        docs: list[str] = []
+        for section in ("visits", "appointments"):
+            for x in rec.get(section, []):
+                d = (x.get("doctor") or "").strip()
+                if d and d not in docs:
+                    docs.append(d)
+        parts = []
+        if meds:
+            parts.append("Medicines: " + ", ".join(meds) + ".")
+        if conds:
+            parts.append("Conditions: " + ", ".join(conds) + ".")
+        if docs:
+            parts.append("Doctors: " + ", ".join(docs) + ".")
+        return " ".join(parts)
+
+    def overview(self, pid: str) -> dict | None:
+        """Compact summary for the web page's patient card."""
+        rec = self.records.get(pid)
+        if not rec:
+            return None
+        p = rec["profile"]
+        today = date.today().isoformat()
+        upcoming = sorted((a for a in rec.get("appointments", []) if (a.get("date") or "") >= today),
+                          key=lambda a: (a.get("date", ""), a.get("time", "")))
+        return {
+            "id": pid,
+            "name": p.get("name"), "age": p.get("age"), "sex": p.get("sex"),
+            "blood_group": p.get("blood_group"), "primary_doctor": p.get("primary_doctor"),
+            "emergency_contact": p.get("emergency_contact"),
+            "allergies": [{"substance": a["substance"], "severity": a["severity"]} for a in rec.get("allergies", [])],
+            "conditions": [c["name"] for c in rec.get("conditions", [])],
+            "medications": [{"name": m["name"], "dose": m["dose"], "frequency": m["frequency"]}
+                            for m in rec.get("medications", [])],
+            "next_appointment": upcoming[0] if upcoming else None,
+        }
+
     def safety_summary(self, pid: str) -> str:
         """Always-on facts the AI must never miss: allergies, conditions, current meds."""
         rec = self.records[pid]
@@ -208,14 +253,40 @@ class PatientRecordStore:
         return (f"Name: {p['name']}, age {p['age']}, {p['sex']}. "
                 f"ALLERGIES: {allergies}. CONDITIONS: {conds}. CURRENT MEDICINES: {meds}.")
 
-    def retrieve(self, pid: str, question: str, k: int = 5) -> list[Chunk]:
+    def retrieve(self, pid: str, question: str, k: int = 4) -> list[Chunk]:
+        """Top matching record chunks: no weak matches, no duplicates,
+        no past appointments, and only ONE appointment for 'next appointment' questions."""
         if pid not in self.index:
             return []
         q = expand_query(question)
         idx = self.index[pid]
         scored = sorted(((idx.score(q, i), i) for i in range(idx.N)), reverse=True)
-        top = [self.chunks[pid][i] for s, i in scored[:k] if s > 0]
-        return top
+        if not scored or scored[0][0] <= 0:
+            return []
+
+        best = scored[0][0]
+        today = date.today().isoformat()
+        hits: list[Chunk] = []
+        seen: set[str] = set()
+        for s, i in scored:
+            if s <= 0 or s < best * 0.45 or len(hits) >= k:      # drop weak matches
+                break
+            c = self.chunks[pid][i]
+            if c.section == "appointments" and c.date and c.date < today:
+                continue                                          # past appointments aren't "upcoming"
+            key = " ".join(c.text.lower().split())
+            if key in seen:                                       # identical record text
+                continue
+            seen.add(key)
+            hits.append(c)
+
+        # "next appointment" should mean ONE appointment: the earliest upcoming
+        qwords = set(re.findall(r"[a-z]+", question.lower()))
+        appts = [c for c in hits if c.section == "appointments"]
+        if len(appts) > 1 and qwords & {"next", "upcoming", "soon"}:
+            keep = min(appts, key=lambda c: c.date)
+            hits = [c for c in hits if c.section != "appointments" or c is keep]
+        return hits
 
 
 # Single shared store
@@ -233,12 +304,18 @@ def get_store() -> PatientRecordStore:
     return _store
 
 
-def build_context(pid: str, question: str, k: int = 5) -> str:
-    """Text block injected into the LLM prompt."""
+def build_context_with_sources(pid: str, question: str, k: int = 4) -> tuple[str, list[Chunk]]:
+    """Text block for the LLM prompt, plus the record chunks it was built from."""
     store = get_store()
     if not store.has_patient(pid):
-        return "No health record found for this patient."
+        return "No health record found for this patient.", []
     hits = store.retrieve(pid, question, k)
     lines = [f"- [{c.section}] {c.text}" for c in hits]
-    return ("PATIENT SUMMARY:\n" + store.safety_summary(pid) +
+    text = ("PATIENT SUMMARY:\n" + store.safety_summary(pid) +
             "\n\nRELEVANT RECORDS:\n" + ("\n".join(lines) if lines else "- (nothing specific found)"))
+    return text, hits
+
+
+def build_context(pid: str, question: str, k: int = 4) -> str:
+    """Text block injected into the LLM prompt."""
+    return build_context_with_sources(pid, question, k)[0]
