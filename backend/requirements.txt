@@ -7,3 +7,5 @@ edge-tts>=6.1.9
 numpy>=1.26.0
 soundfile>=0.12.1
 python-dotenv>=1.0.1
+   openai
+   python-dotenv
