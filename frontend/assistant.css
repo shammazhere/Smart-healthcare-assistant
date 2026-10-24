@@ -1,0 +1,379 @@
+/* ===================================================================
+   HealthBot Assistant page — extends style.css (load style.css first)
+   =================================================================== */
+
+.assistant-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.muted {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+/* ── Navbar extras ─────────────────────────────────────────────────── */
+.patient-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-full);
+  padding: 6px 8px 6px 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.patient-picker select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-full);
+  color: #fff;
+  font-family: var(--font-main);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  outline: none;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.patient-picker select option {
+  background: #0f172a;
+  color: #fff;
+}
+
+.status-pill.nav-link {
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.status-pill.nav-link:hover {
+  color: #fff;
+  border-color: var(--card-hover-border);
+}
+
+.status-pill.offline .indicator-dot {
+  background: var(--red-heart);
+}
+
+.status-pill.connecting .indicator-dot {
+  background: var(--amber-warn);
+}
+
+/* ── Chat card ─────────────────────────────────────────────────────── */
+.chat-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tool-btn {
+  font-family: var(--font-main);
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--card-border);
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tool-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-main);
+}
+
+.tool-btn.on {
+  background: rgba(124, 109, 240, 0.18);
+  border-color: var(--accent-primary);
+  color: var(--accent-light);
+}
+
+.chat-scroll {
+  min-height: 340px;
+  max-height: 52vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 6px 4px 0;
+  margin-bottom: 14px;
+}
+
+.chat-scroll::-webkit-scrollbar { width: 4px; }
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+
+.chat-scroll .dialogue-msg {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.chat-scroll .dialogue-msg.user,
+.chat-scroll .dialogue-msg.robot {
+  max-width: 88%;
+}
+
+.dialogue-msg.pending .msg-content {
+  color: var(--text-mid);
+  font-style: italic;
+}
+
+.msg-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.chip, .chip-btn {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-main);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--card-border);
+  color: var(--text-mid);
+}
+
+.chip-warn {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+}
+
+.chip-info {
+  background: rgba(124, 109, 240, 0.14);
+  border-color: rgba(124, 109, 240, 0.3);
+  color: var(--accent-light);
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.chip-btn {
+  cursor: pointer;
+  font-size: 0.74rem;
+  padding: 6px 12px;
+  transition: all 0.2s ease;
+}
+
+.chip-btn:hover {
+  color: #fff;
+  border-color: var(--accent-primary);
+  background: rgba(124, 109, 240, 0.16);
+}
+
+/* ── Composer (mic + text) ─────────────────────────────────────────── */
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.composer input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-full);
+  padding: 12px 18px;
+  color: #fff;
+  font-family: var(--font-main);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.composer input:focus {
+  border-color: var(--accent-primary);
+}
+
+.composer .btn-send {
+  border-radius: var(--radius-full);
+  padding: 12px 22px;
+}
+
+.voice-mic-btn.mic-small {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.mic-small .mic-inner-circle {
+  width: 54px;
+  height: 54px;
+}
+
+.mic-small .mic-svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* the circle swells with your voice (--level is set from JS) */
+.voice-mic-btn.active .mic-inner-circle {
+  transform: scale(calc(1 + var(--level, 0) * 0.28));
+}
+
+.mic-hint {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  margin-top: 10px;
+  min-height: 1.2em;
+}
+
+.audio-state-pill.thinking {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fcd34d;
+}
+
+.audio-state-pill.thinking .state-dot {
+  background: var(--amber-warn);
+  box-shadow: 0 0 8px var(--amber-warn);
+}
+
+/* ── Patient card ──────────────────────────────────────────────────── */
+.patient-card .pt-name {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.patient-card .pt-meta {
+  font-size: 0.78rem;
+  color: var(--text-mid);
+  margin-bottom: 4px;
+}
+
+.pt-block {
+  margin-top: 14px;
+}
+
+.pt-block h3 {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.pt-block .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pt-block ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pt-block li {
+  font-size: 0.8rem;
+  color: var(--text-main);
+  line-height: 1.35;
+}
+
+.pt-block li span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+/* ── Sources ───────────────────────────────────────────────────────── */
+.sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.source-item {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 9px 12px;
+}
+
+.source-item .chip {
+  margin-bottom: 4px;
+}
+
+.source-item p {
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--text-mid);
+}
+
+/* ── Fixed-height layout (desktop): the page never scrolls,
+      only the chat and the side panel scroll inside their own boxes ── */
+@media (min-width: 901px) {
+  html, body { height: 100%; overflow: hidden; }
+  .app-container { height: 100vh; padding-bottom: 16px; }
+  .assistant-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .chat-card { min-height: 0; overflow: hidden; }
+  .chat-scroll { flex: 1 1 auto; min-height: 0; max-height: none; }
+  .suggestions, .composer, .mic-hint, .chat-tools { flex: 0 0 auto; }
+  .side-col { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+  .side-col > .glass-card { flex: 0 0 auto; }   /* keep full height; the column scrolls instead */
+  .sources-list { max-height: 240px; }
+  .app-footer { flex: 0 0 auto; }
+}
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .assistant-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .patient-picker {
+    justify-content: space-between;
+  }
+
+  .chat-scroll {
+    max-height: 46vh;
+  }
+}

@@ -1,10 +1,10 @@
 # ============================================================
 # server.py — FastAPI AI Gateway
 #   /ws/audio      ESP32-S3 robot:   PCM audio in  -> PCM speech out
-#   /ws/web        Browser page:     mic or text in -> text + MP3 speech out
+#   /ws/web        Browser page:     mic or text in -> conversation reply + Baymax-style MP3 speech
 #   /api/...       Patient data and text Q&A over plain HTTP
 #
-#   Run: uvicorn server:app --host 0.0.0.0 --port 8765 --reload
+#   Run: python -m uvicorn server:app --host 0.0.0.0 --port 8765 --reload
 # ============================================================
 import asyncio
 import json
@@ -18,8 +18,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
+import baymax_tts
 import stt_engine
 import tts_engine
+from conversation import BOT_NAME, GREETING, Conversation
 from llm_agent import DEFAULT_PATIENT_ID, generate_response_with_sources, load_llm
 from rag_engine import get_store
 
@@ -52,7 +54,7 @@ MAX_BUFFER_BYTES = SAMPLE_RATE * BYTES_PER_SAMPLE * 30   # 30 s max utterance
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  ESP32-S3 robot  (/ws/audio)  — unchanged behaviour, now with better STT/TTS
+#  ESP32-S3 robot  (/ws/audio)  — unchanged
 # ════════════════════════════════════════════════════════════════════════════
 @app.websocket("/ws/audio")
 async def audio_ws(ws: WebSocket):
@@ -144,13 +146,15 @@ async def process_utterance(ws: WebSocket, pcm_bytes: bytes, client_id: str):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  Browser assistant page  (/ws/web)
+#  Browser assistant page  (/ws/web)  — conversational, Baymax-style voice
 #
 #  Browser -> server:  binary  = 16 kHz 16-bit mono PCM while recording
 #                      {"type":"start"}                   begin a recording (also interrupts a reply)
 #                      {"type":"end"}                     recording finished -> transcribe + answer
-#                      {"type":"text","text":"..."}       typed question
-#                      {"type":"patient","id":"..."}      switch patient
+#                      {"type":"text","text":"..."}       typed message
+#                      {"type":"greet"}                   speak the opening greeting
+#                      {"type":"reset"}                   forget the conversation so far
+#                      {"type":"patient","id":"..."}      switch patient (also resets the conversation)
 #                      {"type":"cancel"} / {"type":"ping"}
 #  Server -> browser:  ready, status, transcript, no_speech, reply(+sources),
 #                      audio (JSON header, then one binary MP3 frame), done, error, info
@@ -165,6 +169,7 @@ class WebSession:
         self.buf = bytearray()
         self.recording = False
         self.task: asyncio.Task | None = None
+        self.conv = Conversation()          # this browser's conversation memory
         self._lock = asyncio.Lock()
 
     async def send(self, obj: dict):
@@ -216,12 +221,21 @@ class WebSession:
 
     async def answer(self, text: str):
         await self.send({"type": "status", "state": "thinking"})
-        reply, sources = await generate_response_with_sources(text, self.pid)
+        reply, sources = await self.conv.reply(text, self.pid)
         await self.send({"type": "reply", "text": reply, "sources": sources})
+        await self.speak(reply)
+
+    async def greet(self):
+        text = GREETING.format(name=BOT_NAME)
+        self.conv.add_assistant(text)
+        await self.send({"type": "reply", "text": text, "sources": [], "greeting": True})
+        await self.speak(text)
+
+    async def speak(self, text: str):
         await self.send({"type": "status", "state": "speaking"})
         try:
             seq = 0
-            async for mp3 in tts_engine.synthesize_sentences(reply):
+            async for mp3 in baymax_tts.synthesize_sentences(text):
                 await self.send_audio(seq, mp3)
                 seq += 1
         except asyncio.CancelledError:
@@ -245,7 +259,7 @@ async def web_ws(ws: WebSocket):
         s.pid = next(iter(store.records))
     log.info("[web] browser connected")
     await s.send({"type": "ready", "patient_id": s.pid, "patients": _patients(),
-                  "stt": stt_engine.info(), "tts": tts_engine.info()})
+                  "stt": stt_engine.info(), "tts": baymax_tts.info()})
     try:
         while True:
             msg = await ws.receive()
@@ -279,11 +293,21 @@ async def web_ws(ws: WebSocket):
                 if text:
                     await s.cancel()
                     s.run(s.answer(text))
+            elif kind == "greet":
+                await s.cancel()
+                s.run(s.greet())
+            elif kind == "reset":
+                s.recording = False
+                s.buf.clear()
+                await s.cancel()
+                s.conv.reset()
+                await s.send({"type": "status", "state": "idle"})
             elif kind == "patient":
                 pid = str(data.get("id", ""))
                 if get_store().has_patient(pid):
                     await s.cancel()
                     s.pid = pid
+                    s.conv.reset()                # a new patient means a fresh conversation
                     await s.send({"type": "patient", "patient_id": pid})
             elif kind == "cancel":
                 s.recording = False
@@ -322,7 +346,7 @@ async def api_patient(pid: str):
 
 @app.post("/api/ask")
 async def api_ask(body: AskBody):
-    """Ask a question in text and get the answer + the records it used (no audio)."""
+    """Ask a single question in text and get the answer + the records it used (no audio, no memory)."""
     reply, sources = await generate_response_with_sources(body.text, body.patient_id)
     return {"reply": reply, "sources": sources}
 
@@ -334,8 +358,8 @@ async def health():
         "connections": len(active_connections),
         "patients": len(get_store().records),
         "stt": stt_engine.info(),
-        "tts": tts_engine.info(),
-        "pipeline": "Whisper → records (SQLite) + LLM → edge-tts",
+        "tts": baymax_tts.info(),
+        "pipeline": "Whisper → records (SQLite) + conversational LLM → edge-tts (soft robot voice)",
     }
 
 

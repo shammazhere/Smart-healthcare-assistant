@@ -1,0 +1,67 @@
+/* ===================================================================
+   HealthBot — Light theme. Load AFTER style.css (and assistant.css).
+   =================================================================== */
+:root {
+  color-scheme: light;
+  --bg-base: #f4f6fb;
+  --bg-gradient: radial-gradient(ellipse 90% 60% at 50% -15%, rgba(124, 109, 240, 0.12) 0%, #f4f6fb 70%);
+  --card-bg: #ffffff;
+  --card-border: rgba(15, 23, 42, 0.10);
+  --card-hover-border: rgba(91, 91, 214, 0.45);
+  --accent-primary: #5b5bd6;
+  --accent-glow: rgba(91, 91, 214, 0.25);
+  --accent-light: #4f46e5;
+  --red-glow: rgba(244, 63, 94, 0.25);
+  --emerald-glow: rgba(16, 185, 129, 0.2);
+  --text-main: #1c2233;
+  --text-mid: #475467;
+  --text-dim: #667085;
+}
+
+.navbar, .glass-card {
+  backdrop-filter: none;
+  box-shadow: 0 2px 14px rgba(30, 40, 90, 0.07);
+}
+.glass-card::before { display: none; }
+
+/* dark inset panels -> light inset panels */
+.connection-bar, .vital-metric-box, .ecg-container, .transcript-box, .speed-control-box,
+.diag-item, .patient-picker, .source-item { background: #f6f7fc; }
+
+/* inputs */
+.ip-input-group input, .dialogue-input-row input, .composer input, .patient-picker select { color: var(--text-main); }
+.composer input, .dialogue-input-row input, .patient-picker select { background: #ffffff; }
+.composer input::placeholder, .dialogue-input-row input::placeholder { color: #98a2b3; }
+.patient-picker select option { background: #ffffff; color: var(--text-main); }
+
+/* pills, chips, buttons */
+.status-pill, .audio-state-pill, .finger-badge, .uptime-badge, .chip, .chip-btn,
+.preset-btn, .btn-secondary, .dpad-btn { background: #f1f3f9; }
+.dpad-btn, .preset-btn:hover, .btn-secondary:hover, .chip-btn:hover,
+.status-pill.nav-link:hover, .btn-clear:hover { color: var(--text-main); }
+.chip-btn:hover { background: #e9e8fd; }
+.btn-clear:hover { background: #e9ecf5; }
+.status-pill.online, .finger-badge.active { color: #047857; }
+.audio-state-pill.listening { color: #e11d48; }
+.audio-state-pill.thinking, .chip-warn { color: #b45309; }
+.dpad-stop { background: #fff1f3; color: #e11d48; }
+.dpad-btn:active, .dpad-btn.active, .dpad-stop:active, .dpad-stop.active { color: #ffffff; }
+.preset-btn.active { background: #e9e8fd; color: var(--accent-light); }
+.btn-connect, .btn-send, .mic-inner-circle { color: #ffffff; }
+
+.tool-btn { background: #f1f3f9; color: var(--text-mid); }
+.tool-btn:hover { background: #e9e8fd; color: var(--text-main); }
+.tool-btn.on { background: #e9e8fd; color: var(--accent-light); }
+
+/* chat messages */
+.dialogue-msg.user { background: #eeedfd; }
+.dialogue-msg.robot { background: #e8f8f1; }
+.dialogue-msg.system-msg { background: #f6f7fc; }
+
+/* misc */
+.bar-track, .speed-slider { background: #e3e7f1; }
+kbd { background: #ffffff; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.12); }
+
+/* scrollbars */
+.chat-scroll::-webkit-scrollbar-thumb, .dialogue-scroll::-webkit-scrollbar-thumb { background: #c5cbe0; }
+.sources-list, .side-col { scrollbar-width: thin; scrollbar-color: #c5cbe0 transparent; }

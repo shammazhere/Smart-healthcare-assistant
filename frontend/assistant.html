@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HealthBot Assistant — Voice &amp; Chat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="assistant.css">
+  <link rel="stylesheet" href="light.css">
+</head>
+<body>
+  <div class="app-background"></div>
+
+  <div class="app-container">
+    <header class="navbar">
+      <div class="brand">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v20M2 12h20M7 7l10 10M17 7L7 17" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>HealthBot <span class="badge-version">Assistant</span></h1>
+          <p class="subtitle">Ask by voice or text — answers come from the patient's health records</p>
+        </div>
+      </div>
+
+      <div class="patient-picker">
+        <label for="patientSelect">Patient</label>
+        <select id="patientSelect" aria-label="Choose patient"></select>
+      </div>
+
+      <div class="system-status-pills">
+        <div class="status-pill" id="wsPill">
+          <span class="indicator-dot"></span>
+          <span class="pill-text" id="wsStatusText">Connecting…</span>
+        </div>
+        <a class="status-pill nav-link" href="index.html">← Dashboard</a>
+      </div>
+    </header>
+
+    <main class="assistant-grid">
+
+      <!-- Chat + voice -->
+      <section class="glass-card chat-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">💬</span>
+            <div>
+              <h2>Ask HealthBot</h2>
+              <p id="engineInfo">Speech recognition • Health records • Voice reply</p>
+            </div>
+          </div>
+          <div class="audio-state-pill" id="audioStatePill">
+            <span class="state-dot"></span>
+            <span id="audioStateText">Idle</span>
+          </div>
+        </div>
+
+        <div class="chat-tools">
+          <button type="button" class="tool-btn" id="convBtn" aria-pressed="false">🗣️ Conversation mode: Off</button>
+          <button type="button" class="tool-btn" id="newChatBtn">↺ New conversation</button>
+        </div>
+
+        <div class="chat-scroll" id="chatScroll" aria-live="polite"></div>
+
+        <div class="suggestions" id="suggestions">
+          <button type="button" class="chip-btn">What medicines do I take today?</button>
+          <button type="button" class="chip-btn">When is my next appointment?</button>
+          <button type="button" class="chip-btn">Am I allergic to anything?</button>
+          <button type="button" class="chip-btn">How was my last sugar report?</button>
+          <button type="button" class="chip-btn">Can I take ibuprofen for my knee pain?</button>
+        </div>
+
+        <div class="composer">
+          <button class="voice-mic-btn mic-small" id="micBtn" type="button" aria-label="Talk to HealthBot">
+            <div class="ripple-ring r1"></div>
+            <div class="ripple-ring r2"></div>
+            <div class="ripple-ring r3"></div>
+            <div class="mic-inner-circle">
+              <svg class="mic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>
+              </svg>
+            </div>
+          </button>
+          <input type="text" id="textInput" placeholder="Or type a question…" autocomplete="off" maxlength="500">
+          <button class="btn-send" id="sendBtn" type="button">Send</button>
+        </div>
+        <div class="mic-hint" id="micHint">Tap the microphone and speak. It stops by itself when you finish talking.</div>
+      </section>
+
+      <!-- Side panels -->
+      <aside class="side-col">
+        <article class="glass-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">🗂️</span>
+              <div>
+                <h2>Patient Record</h2>
+                <p>Stored in the local database</p>
+              </div>
+            </div>
+          </div>
+          <div id="patientCard" class="patient-card"><p class="muted">Loading…</p></div>
+        </article>
+
+        <article class="glass-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">🔎</span>
+              <div>
+                <h2>Records Used</h2>
+                <p>What the last answer was based on</p>
+              </div>
+            </div>
+          </div>
+          <div id="sourcesList" class="sources-list"><p class="muted">Ask a question to see which records were used.</p></div>
+        </article>
+      </aside>
+    </main>
+
+    <footer class="app-footer">
+      <span>Smart Healthcare Assistant Robot • Voice &amp; chat assistant</span>
+      <span>Information from records only — not a substitute for a doctor</span>
+    </footer>
+  </div>
+
+  <script src="assistant.js"></script>
+</body>
+</html>
