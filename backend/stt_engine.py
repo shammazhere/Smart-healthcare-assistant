@@ -9,8 +9,16 @@ import wave
 import asyncio
 import logging
 import threading
+from pathlib import Path
 import requests
 import numpy as np
+from dotenv import load_dotenv
+
+_env_path = Path(__file__).resolve().parent / ".env"
+if _env_path.exists():
+    load_dotenv(dotenv_path=_env_path)
+else:
+    load_dotenv()
 
 log = logging.getLogger(__name__)
 

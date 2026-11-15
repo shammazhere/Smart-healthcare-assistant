@@ -8,9 +8,11 @@
 #   Run: uvicorn server:app --host 0.0.0.0 --port 8765 --reload
 # ============================================================
 import os
+import sys
 import json
 import asyncio
 import logging
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import (
     FastAPI,
@@ -24,6 +26,20 @@ from fastapi import (
 )
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Ensure backend directory and repo directory are in sys.path
+_cur_dir = str(Path(__file__).resolve().parent)
+_repo_dir = str(Path(__file__).resolve().parent.parent)
+for _p in (_cur_dir, _repo_dir):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+_env_path = Path(__file__).resolve().parent / ".env"
+if _env_path.exists():
+    load_dotenv(dotenv_path=_env_path, override=True)
+else:
+    load_dotenv(override=True)
 
 try:
     from stt_engine import (
@@ -91,11 +107,14 @@ log = logging.getLogger(__name__)
 # ── Startup / Shutdown lifespan ───────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("Loading Multilingual STT engine (Sarvam primary / Whisper fallback)...")
-    stt_model_size = os.getenv("WHISPER_MODEL_SIZE", DEFAULT_MODEL_SIZE)
-    stt_device = os.getenv("WHISPER_DEVICE", DEFAULT_DEVICE)
-    stt_compute = os.getenv("WHISPER_COMPUTE_TYPE", DEFAULT_COMPUTE_TYPE)
-    load_stt(model_size=stt_model_size, device=stt_device, compute_type=stt_compute)
+    if not is_sarvam_stt():
+        log.info("Sarvam key not found; pre-loading local faster-whisper fallback...")
+        stt_model_size = os.getenv("WHISPER_MODEL_SIZE", DEFAULT_MODEL_SIZE)
+        stt_device = os.getenv("WHISPER_DEVICE", DEFAULT_DEVICE)
+        stt_compute = os.getenv("WHISPER_COMPUTE_TYPE", DEFAULT_COMPUTE_TYPE)
+        load_stt(model_size=stt_model_size, device=stt_device, compute_type=stt_compute)
+    else:
+        log.info("Sarvam AI STT active as primary (Whisper fallback available on demand)")
 
     log.info("Loading Conversational LLM client & preloading RAG store...")
     load_llm()

@@ -10,9 +10,17 @@ import wave
 import base64
 import asyncio
 import logging
+from pathlib import Path
 from typing import AsyncGenerator
 import requests
 import numpy as np
+from dotenv import load_dotenv
+
+_env_path = Path(__file__).resolve().parent / ".env"
+if _env_path.exists():
+    load_dotenv(dotenv_path=_env_path)
+else:
+    load_dotenv()
 
 try:
     import edge_tts

@@ -9,7 +9,20 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(os.getenv("HEALTH_DB_PATH", Path(__file__).parent / "data" / "health.db"))
+DB_DEFAULT = Path(__file__).resolve().parent / "data" / "health.db"
+def _get_db_path() -> Path:
+    env_val = os.getenv("HEALTH_DB_PATH")
+    if env_val:
+        p = Path(env_val)
+        if p.exists():
+            return p.resolve()
+        # If relative to backend/
+        p_rel = Path(__file__).resolve().parent / env_val.replace("backend/", "")
+        if p_rel.exists():
+            return p_rel.resolve()
+    return DB_DEFAULT
+
+DB_PATH = _get_db_path()
 
 # Tables that hold a list of rows per patient: table -> columns
 LIST_TABLES: dict[str, list[str]] = {
