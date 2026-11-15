@@ -1,8 +1,9 @@
 # ============================================================
 # server.py — FastAPI + WebSocket AI Gateway
-#   The ESP32-S3 connects here to stream audio, get AI replies
-#   grounded in patient records (RAG), and receive synthesized
-#   multilingual speech back in real time.
+#   Hybrid Architecture:
+#     - STT: Sarvam AI (saarika:v2) primary -> faster-whisper fallback
+#     - LLM: Google Gemini + SQLite BM25 Patient Records RAG
+#     - TTS: Sarvam AI (bulbul:v1/v2 custom voice) primary -> Edge-TTS fallback
 #
 #   Run: uvicorn server:app --host 0.0.0.0 --port 8765 --reload
 # ============================================================
@@ -11,7 +12,16 @@ import json
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    UploadFile,
+    File,
+    Form,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -19,6 +29,8 @@ try:
     from stt_engine import (
         load_model as load_stt,
         transcribe_async,
+        is_sarvam_available as is_sarvam_stt,
+        pcm_to_wav_bytes,
         SUPPORTED_LANGUAGES,
         DEFAULT_MODEL_SIZE,
         DEFAULT_DEVICE,
@@ -33,6 +45,8 @@ try:
     )
     from tts_engine import (
         synthesize_chunks,
+        synthesize_sarvam_audio,
+        is_sarvam_available as is_sarvam_tts,
         DEFAULT_VOICE,
         DEFAULT_RATE,
         DEFAULT_PITCH,
@@ -43,6 +57,8 @@ except ImportError:
     from backend.stt_engine import (
         load_model as load_stt,
         transcribe_async,
+        is_sarvam_available as is_sarvam_stt,
+        pcm_to_wav_bytes,
         SUPPORTED_LANGUAGES,
         DEFAULT_MODEL_SIZE,
         DEFAULT_DEVICE,
@@ -57,6 +73,8 @@ except ImportError:
     )
     from backend.tts_engine import (
         synthesize_chunks,
+        synthesize_sarvam_audio,
+        is_sarvam_available as is_sarvam_tts,
         DEFAULT_VOICE,
         DEFAULT_RATE,
         DEFAULT_PITCH,
@@ -73,7 +91,7 @@ log = logging.getLogger(__name__)
 # ── Startup / Shutdown lifespan ───────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("Loading Multilingual STT model (Whisper)...")
+    log.info("Loading Multilingual STT engine (Sarvam primary / Whisper fallback)...")
     stt_model_size = os.getenv("WHISPER_MODEL_SIZE", DEFAULT_MODEL_SIZE)
     stt_device = os.getenv("WHISPER_DEVICE", DEFAULT_DEVICE)
     stt_compute = os.getenv("WHISPER_COMPUTE_TYPE", DEFAULT_COMPUTE_TYPE)
@@ -88,7 +106,9 @@ async def lifespan(app: FastAPI):
     except Exception as rag_err:
         log.warning(f"RAG store initialization note: {rag_err}")
 
-    log.info(f"✅ AI Voice Gateway ready — default voice: {DEFAULT_VOICE} ({DEFAULT_RATE})")
+    tts_mode = "Sarvam AI (primary)" if is_sarvam_tts() else f"Edge-TTS ({DEFAULT_VOICE})"
+    stt_mode = "Sarvam AI (primary)" if is_sarvam_stt() else "faster-whisper (local)"
+    log.info(f"✅ AI Voice Gateway ready — TTS: {tts_mode} | STT: {stt_mode}")
     yield
     log.info("Shutting down AI Gateway")
 
@@ -110,7 +130,7 @@ async def audio_ws(ws: WebSocket):
     """
     WebSocket endpoint for ESP32-S3 full-duplex audio stream.
     Receives raw 16-bit 16 kHz PCM chunks, detects silence,
-    executes STT -> Gemini (with RAG records) -> Edge-TTS, and streams PCM chunks back.
+    executes STT (Sarvam/Whisper) -> Gemini RAG -> TTS (Sarvam/Edge), and streams PCM back.
     """
     await ws.accept()
     client_id = str(ws.client)
@@ -206,26 +226,28 @@ async def audio_ws(ws: WebSocket):
 
 async def process_utterance(ws: WebSocket, pcm_bytes: bytes, client_id: str, patient_id: str = DEFAULT_PATIENT_ID):
     """
-    Multilingual STT → Gemini (with RAG context) → Edge-TTS pipeline for one user utterance.
+    Multilingual STT (Sarvam/Whisper) → Gemini + RAG → TTS (Sarvam/Edge-TTS) pipeline.
     Streams synthesized 16-bit 16 kHz PCM chunks back to ESP32-S3 in real time.
     """
-    # 1. Speech-to-Text (runs in thread pool to keep event loop responsive)
+    # 1. Speech-to-Text (Sarvam primary / Whisper fallback)
     try:
         transcription = await transcribe_async(pcm_bytes, sample_rate=SAMPLE_RATE)
         text = str(transcription)
         detected_lang = getattr(transcription, "language", "en")
         confidence = getattr(transcription, "confidence", 0.0)
+        stt_source = getattr(transcription, "source", "stt")
     except Exception as e:
         log.error(f"[{client_id}] STT error: {e}")
         text = ""
         detected_lang = "en"
         confidence = 0.0
+        stt_source = "error"
 
     if not text:
         log.info(f"[{client_id}] Empty transcription — skipping utterance")
         return
 
-    log.info(f"[{client_id}] Transcribed ({detected_lang}, conf={confidence:.2f}): '{text}'")
+    log.info(f"[{client_id}] Transcribed [{stt_source}] ({detected_lang}, conf={confidence:.2f}): '{text}'")
 
     # Send transcript & language to ESP32 / dashboard
     try:
@@ -233,6 +255,7 @@ async def process_utterance(ws: WebSocket, pcm_bytes: bytes, client_id: str, pat
             "transcript": text,
             "language": detected_lang,
             "confidence": round(confidence, 2),
+            "source": stt_source,
             "patient_id": patient_id,
         }))
     except Exception as send_err:
@@ -252,7 +275,7 @@ async def process_utterance(ws: WebSocket, pcm_bytes: bytes, client_id: str, pat
         f"[source={llm_source}]: '{reply}'"
     )
 
-    # 3. Text-to-Speech (Edge-TTS) — stream PCM chunks back to ESP32 speaker
+    # 3. Text-to-Speech (Sarvam AI primary / Edge-TTS fallback) — stream PCM chunks back to ESP32 speaker
     try:
         chunk_count = 0
         async for pcm_chunk in synthesize_chunks(reply, language=detected_lang):
@@ -266,6 +289,86 @@ async def process_utterance(ws: WebSocket, pcm_bytes: bytes, client_id: str, pat
         log.info(f"[{client_id}] Sent {chunk_count} PCM chunks ({detected_lang}) to robot")
     except Exception as e:
         log.error(f"[{client_id}] TTS streaming error: {e}")
+
+
+# ── Standalone Audio Endpoints (STT / TTS) ───────────────────────────────────
+@app.post("/api/stt")
+async def api_stt(
+    audio: UploadFile = File(...),
+    language: str = Form(default="hi-IN")
+):
+    """Convert audio file upload to text using Sarvam AI (with Whisper fallback)."""
+    audio_data = await audio.read()
+    transcription = await transcribe_async(audio_data, language=language)
+    if transcription and str(transcription).strip():
+        return {
+            "transcript": str(transcription),
+            "language": getattr(transcription, "language", language),
+            "source": getattr(transcription, "source", "hybrid"),
+        }
+    raise HTTPException(status_code=500, detail="Failed to transcribe audio")
+
+
+@app.post("/api/tts")
+async def api_tts(
+    text: str = Form(...),
+    language: str = Form(default="hi-IN")
+):
+    """Convert text to speech using Sarvam AI (with Edge-TTS fallback). Returns WAV audio."""
+    wav_bytes = await synthesize_sarvam_audio(text, language=language)
+    if not wav_bytes:
+        # Fallback to Edge-TTS PCM converted to WAV
+        chunks = []
+        async for c in synthesize_chunks(text, language=language):
+            chunks.append(c)
+        if chunks:
+            pcm_all = b"".join(chunks)
+            wav_bytes = pcm_to_wav_bytes(pcm_all, sample_rate=SAMPLE_RATE)
+
+    if wav_bytes:
+        return Response(
+            content=wav_bytes,
+            media_type="audio/wav",
+            headers={"Content-Disposition": "attachment; filename=output.wav"}
+        )
+    raise HTTPException(status_code=500, detail="Failed to generate speech")
+
+
+@app.post("/api/tts/custom")
+async def api_tts_custom(
+    text: str = Form(...),
+    language: str = Form(default="hi-IN"),
+    voice_sample: UploadFile = File(None)
+):
+    """
+    Convert text to speech using Sarvam AI Custom Voice Cloning (bulbul:v2).
+    Pass a reference voice sample audio file.
+    """
+    sample_bytes = None
+    if voice_sample:
+        sample_bytes = await voice_sample.read()
+
+    wav_bytes = await synthesize_sarvam_audio(
+        text=text,
+        language=language,
+        custom_audio_bytes=sample_bytes,
+    )
+
+    if not wav_bytes:
+        # Fallback to standard TTS
+        chunks = []
+        async for c in synthesize_chunks(text, language=language):
+            chunks.append(c)
+        if chunks:
+            wav_bytes = pcm_to_wav_bytes(b"".join(chunks), sample_rate=SAMPLE_RATE)
+
+    if wav_bytes:
+        return Response(
+            content=wav_bytes,
+            media_type="audio/wav",
+            headers={"Content-Disposition": "attachment; filename=custom_output.wav"}
+        )
+    raise HTTPException(status_code=500, detail="Failed to generate speech with custom voice")
 
 
 # ── RAG Patient Records HTTP APIs ─────────────────────────────────────────────
@@ -373,15 +476,24 @@ async def health():
     except Exception:
         pass
 
+    sarvam_tts_on = is_sarvam_tts()
+    sarvam_stt_on = is_sarvam_stt()
+
     return {
         "status": "online",
         "connections": len(active_connections),
         "patients": patient_count,
         "pipeline": {
-            "stt": f"faster-whisper ({stt_model_size})",
+            "stt": "Sarvam AI (saarika:v2) [fallback: faster-whisper]" if sarvam_stt_on else f"faster-whisper ({stt_model_size})",
             "llm": f"Google Gemini ({llm_model})",
             "rag": f"BM25 Retrieval ({patient_count} patients)",
-            "tts": f"Edge-TTS ({DEFAULT_VOICE})",
+            "tts": "Sarvam AI (bulbul:v1/v2 custom voice) [fallback: Edge-TTS]" if sarvam_tts_on else f"Edge-TTS ({DEFAULT_VOICE})",
+        },
+        "hybrid_config": {
+            "sarvam_tts_active": sarvam_tts_on,
+            "sarvam_stt_active": sarvam_stt_on,
+            "edge_tts_fallback": True,
+            "whisper_stt_fallback": True,
         },
         "tts_config": {
             "default_voice": DEFAULT_VOICE,
