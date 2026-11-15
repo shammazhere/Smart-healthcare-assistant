@@ -102,11 +102,22 @@ def _parse_json(raw: str) -> dict:
 
 
 def extract_record_with_llm(text: str) -> dict:
-    api_key = os.getenv("GROQ_API_KEY", "")
+    api_key = os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
     if not api_key:
-        raise RuntimeError("GROQ_API_KEY is not set in .env")
-    client = OpenAI(api_key=api_key, base_url=os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1"))
-    model = os.getenv("EXTRACT_MODEL", os.getenv("LLM_MODEL", "openai/gpt-oss-120b"))
+        raise RuntimeError("No API key found. Set GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY in backend/.env")
+    
+    if os.getenv("GEMINI_API_KEY") and not os.getenv("GROQ_API_KEY"):
+        default_base = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        default_model = "gemini-2.0-flash"
+    elif os.getenv("OPENAI_API_KEY") and not os.getenv("GROQ_API_KEY"):
+        default_base = "https://api.openai.com/v1"
+        default_model = "gpt-4o-mini"
+    else:
+        default_base = "https://api.groq.com/openai/v1"
+        default_model = "openai/gpt-oss-120b"
+
+    base_url = os.getenv("LLM_BASE_URL", default_base)
+    model = os.getenv("EXTRACT_MODEL", os.getenv("LLM_MODEL", default_model))
 
     if len(text) > MAX_CHARS:
         print(f"  ! Document is very long ({len(text)} chars); only the first {MAX_CHARS} are used")
