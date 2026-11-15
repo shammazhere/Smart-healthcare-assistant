@@ -1,0 +1,63 @@
+{
+  "patient_id": "patient_002",
+  "profile": {
+    "name": "Sunita Sharma",
+    "age": 59,
+    "sex": "Female",
+    "blood_group": "A+",
+    "height_cm": "158",
+    "weight_kg": "64",
+    "language": "Hindi, English",
+    "primary_doctor": "Dr. Vikram Menon (General Medicine)",
+    "emergency_contact": {"name": "Rajesh Sharma", "relation": "Husband", "phone": "+91 98450 11223"}
+  },
+  "allergies": [
+    {"substance": "Sulfa drugs", "reaction": "Skin rash", "severity": "Mild"},
+    {"substance": "Dust mites", "reaction": "Sneezing and wheezing", "severity": "Moderate"}
+  ],
+  "conditions": [
+    {"name": "Hypothyroidism", "since": "2014", "status": "Controlled on medication"},
+    {"name": "Bronchial Asthma", "since": "2008", "status": "Controlled, occasional night symptoms"},
+    {"name": "Osteoarthritis (both knees)", "since": "2020", "status": "Ongoing, managed with physiotherapy"}
+  ],
+  "surgeries": [
+    {"procedure": "Appendectomy", "date": "1995-06-12", "hospital": "Lakeview Hospital", "notes": "Uncomplicated recovery."}
+  ],
+  "medications": [
+    {"name": "Levothyroxine", "dose": "75 mcg", "frequency": "Once daily, early morning on an empty stomach", "purpose": "Hypothyroidism"},
+    {"name": "Budesonide-Formoterol inhaler", "dose": "2 puffs", "frequency": "Twice daily, morning and night", "purpose": "Asthma control"},
+    {"name": "Salbutamol inhaler", "dose": "2 puffs", "frequency": "Only when wheezing or short of breath", "purpose": "Asthma relief"},
+    {"name": "Calcium + Vitamin D3", "dose": "500 mg / 250 IU", "frequency": "Once daily, after lunch", "purpose": "Bone health"},
+    {"name": "Paracetamol", "dose": "500 mg", "frequency": "When needed for knee pain, maximum 3 per day", "purpose": "Pain relief"}
+  ],
+  "lab_results": [
+    {"date": "2026-09-18", "test": "TSH", "value": "3.1 mIU/L", "reference": "0.4 - 4.0 mIU/L", "note": "Within range"},
+    {"date": "2026-09-18", "test": "Vitamin D", "value": "24 ng/mL", "reference": "30 - 100 ng/mL", "note": "Slightly low"},
+    {"date": "2026-09-18", "test": "Hemoglobin", "value": "12.4 g/dL", "reference": "12.0 - 15.5 g/dL", "note": "Normal"},
+    {"date": "2026-03-10", "test": "TSH", "value": "4.6 mIU/L", "reference": "0.4 - 4.0 mIU/L", "note": "Slightly high, dose adjusted"}
+  ],
+  "vitals_baseline": {
+    "resting_heart_rate_bpm": "76",
+    "usual_blood_pressure": "122/78 mmHg",
+    "usual_spo2_percent": "97",
+    "note": "SpO2 may dip to 95 percent during asthma flare-ups."
+  },
+  "visits": [
+    {"date": "2026-09-25", "doctor": "Dr. Vikram Menon", "reason": "Thyroid and asthma review", "summary": "TSH back in range. Asthma well controlled. Vitamin D supplement continued."},
+    {"date": "2026-06-14", "doctor": "Dr. Neha Kapoor (Orthopedics)", "reason": "Knee pain", "summary": "Mild to moderate osteoarthritis in both knees. Physiotherapy advised, no surgery needed."}
+  ],
+  "appointments": [
+    {"date": "2026-11-12", "time": "11:00", "doctor": "Dr. Vikram Menon", "reason": "Routine follow-up", "location": "Sunrise Clinic, Room 2"},
+    {"date": "2026-12-03", "time": "16:30", "doctor": "Dr. Neha Kapoor (Orthopedics)", "reason": "Knee physiotherapy review", "location": "Sunrise Clinic, Room 5"}
+  ],
+  "care_instructions": [
+    "Take levothyroxine 30 to 60 minutes before breakfast and do not take calcium within 4 hours of it.",
+    "Rinse the mouth after every steroid inhaler use.",
+    "Avoid dust and strong smells; keep the salbutamol inhaler within reach at all times.",
+    "Do 20 minutes of gentle walking and knee exercises daily."
+  ],
+  "doctor_notes": [
+    {"date": "2026-09-25", "note": "Recheck TSH in 6 months. Reassess vitamin D after 3 months of supplements."},
+    {"date": "2026-06-14", "note": "Avoid stairs and squatting where possible. Weight reduction of 3 to 4 kg would help the knees."}
+  ]
+}

@@ -1,9 +1,14 @@
 # ============================================================
-# llm_agent.py — Healthcare Conversational Agent via Google Gemini
+# llm_agent.py — Healthcare Conversational Agent via Google Gemini + RAG
+#   * Answers grounded in patient health records (SQLite RAG)
+#   * Multilingual support across 10 Indian languages + English
+#   * Deterministic zero-latency emergency safety guardrails
 # ============================================================
 import os
 import time
 import logging
+from collections import defaultdict, deque
+from datetime import date
 from openai import (
     AsyncOpenAI,
     APITimeoutError,
@@ -14,6 +19,11 @@ from openai import (
     APIStatusError,
 )
 from dotenv import load_dotenv
+
+try:
+    from rag_engine import build_context_with_sources, get_store
+except ImportError:
+    from backend.rag_engine import build_context_with_sources, get_store
 
 load_dotenv()
 log = logging.getLogger(__name__)
@@ -79,7 +89,7 @@ FALLBACK_RESPONSES: dict[str, str] = {
     "en": "I am having trouble connecting right now. Please try again or ask your caregiver.",
     "hi": "मुझे अभी कनेक्ट करने में समस्या हो रही है। कृपया पुनः प्रयास करें या अपने देखभालकर्ता से संपर्क करें।",
     "kn": "ಸಂಪರ್ಕಿಸುವಲ್ಲಿ ತೊಂದರೆಯಾಗುತ್ತಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ ನಿಮ್ಮ ಆರೈಕೆದಾರರನ್ನು ಸಂಪರ್ಕಿಸಿ.",
-    "ml": "ഇപ്പോൾ കണക്റ്റുചെയ്യുന്നതിൽ പ്രശ്നമുണ്ട്. ദയവായി വീണ്ടും ശ്രമിക്കുക അല്ലെങ്കിൽ കെയർഗിവറോട് ചോദിക്കുക.",
+    "ml": "ഇപ്പോൾ കണക്റ്റുചെയ്യുന്നതിൽ പ്രശ്നമുണ്ട്. ദಯവായി വീണ്ടും ശ്രമിക്കുക അല്ലെങ്കിൽ കെയർഗിവറോട് ചോദിക്കുക.",
     "ta": "தற்போது இணைப்பதில் சிக்கல் உள்ளது. தயவுசெய்து மீண்டும் முயற்சிக்கவும் அல்லது உங்கள் பராமரிப்பாளரை அணுகவும்.",
     "te": "కనెక్ట్ చేయడంలో సమస్య ఏర్పడింది. దయచేసి మళ్లీ ప్రయత్నించండి లేదా మీ సంరక్షకుడిని సంప్రదించండి.",
     "mr": "कनेक्ट करण्यात अडचण येत आहे. कृपया पुन्हा प्रयत्न करा किंवा काळजीवाहकांशी बोला.",
@@ -105,9 +115,12 @@ Clinical Safety & Interaction Rules:
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 REQUEST_TIMEOUT_SECONDS = 20.0
 MAX_OUTPUT_TOKENS = 600
+DEFAULT_PATIENT_ID = os.getenv("DEFAULT_PATIENT_ID", "patient_001")
+HISTORY_TURNS = 4
 
 _client: AsyncOpenAI | None = None
 _configured_model: str = DEFAULT_MODEL
+_history: dict[str, deque] = defaultdict(lambda: deque(maxlen=HISTORY_TURNS * 2))
 
 
 class LLMResponse(str):
@@ -162,6 +175,12 @@ def get_llm_config() -> tuple[str, str, str]:
     return api_key, model, base_url
 
 
+def reset_history(patient_id: str | None = None):
+    """Reset conversational history for a patient session."""
+    pid = patient_id or DEFAULT_PATIENT_ID
+    _history[pid].clear()
+
+
 def load_llm():
     """
     Initialize the asynchronous LLM client once at startup.
@@ -191,17 +210,31 @@ def load_llm():
             "Please set your key in backend/.env to enable live AI responses."
         )
 
+    # Initialize RAG store if available
+    try:
+        store = get_store()
+        log.info(f"[RAG] Patient record store ready ({len(store.records)} patient(s) loaded)")
+    except Exception as rag_err:
+        log.warning(f"[RAG Warning] Could not preload patient store: {rag_err}")
 
-async def generate_response(user_text: str, language: str = "en") -> LLMResponse:
+
+async def generate_response_with_sources(
+    user_text: str,
+    language: str = "en",
+    patient_id: str | None = None,
+) -> tuple[LLMResponse, list[dict]]:
     """
-    Send user utterance to Gemini and return the assistant's response in the patient's language.
-    Measures and logs latency, finish reasons, and error categories.
+    Send user utterance to Gemini with patient health record RAG context.
+    Returns (LLMResponse, sources).
     """
     start_time = time.perf_counter()
 
     if not user_text or not user_text.strip():
         elapsed = time.perf_counter() - start_time
-        return LLMResponse("I didn't catch that. Could you please repeat?", source="fallback", latency_s=elapsed)
+        return (
+            LLMResponse("I didn't catch that. Could you please repeat?", source="fallback", latency_s=elapsed),
+            []
+        )
 
     norm_lang = language.lower().strip() if language else "en"
     if norm_lang not in LANGUAGE_NAMES:
@@ -212,11 +245,14 @@ async def generate_response(user_text: str, language: str = "en") -> LLMResponse
         elapsed = time.perf_counter() - start_time
         emergency_msg = EMERGENCY_RESPONSES.get(norm_lang, EMERGENCY_RESPONSES["en"])
         log.warning(f"[LLM Safety Override] Emergency keyword triggered in {elapsed*1000:.1f}ms for lang='{norm_lang}'")
-        return LLMResponse(
-            emergency_msg,
-            source="emergency_override",
-            latency_s=elapsed,
-            finish_reason="safety_override"
+        return (
+            LLMResponse(
+                emergency_msg,
+                source="emergency_override",
+                latency_s=elapsed,
+                finish_reason="safety_override"
+            ),
+            []
         )
 
     if _client is None:
@@ -227,34 +263,64 @@ async def generate_response(user_text: str, language: str = "en") -> LLMResponse
     if not api_key and getattr(_client, "api_key", "") == "unconfigured_key":
         elapsed = time.perf_counter() - start_time
         log.warning("[LLM] Cannot generate response: No GEMINI_API_KEY configured in backend/.env")
-        return LLMResponse(
-            FALLBACK_RESPONSES.get(norm_lang, FALLBACK_RESPONSES["en"]),
-            source="fallback",
-            latency_s=elapsed,
-            error_category="missing_api_key"
+        return (
+            LLMResponse(
+                FALLBACK_RESPONSES.get(norm_lang, FALLBACK_RESPONSES["en"]),
+                source="fallback",
+                latency_s=elapsed,
+                error_category="missing_api_key"
+            ),
+            []
         )
 
+    pid = patient_id or DEFAULT_PATIENT_ID
     target_lang_name = LANGUAGE_NAMES.get(norm_lang, "English")
 
-    # Multilingual System Prompt Instruction
-    system_instruction = (
-        f"{BASE_SYSTEM_PROMPT}\n\n"
+    # 2. RAG Context Retrieval from SQLite
+    rag_context = ""
+    sources: list[dict] = []
+    try:
+        store = get_store()
+        if store.has_patient(pid):
+            rag_context, hits = build_context_with_sources(pid, user_text, k=4)
+            sources = [{"section": c.section, "text": c.text, "date": c.date} for c in hits]
+    except Exception as rag_err:
+        log.warning(f"[RAG Error] Failed to retrieve context for patient '{pid}': {rag_err}")
+
+    # 3. Multilingual System Prompt Instruction with RAG Context
+    system_instruction = f"{BASE_SYSTEM_PROMPT}\n\n"
+    if rag_context:
+        today_str = date.today().strftime("%A, %d %B %Y")
+        system_instruction += (
+            f"PATIENT HEALTH RECORDS (Patient ID: {pid}):\n"
+            f"{rag_context}\n\n"
+            f"Clinical Record Usage Rules:\n"
+            f"- Today's date is {today_str}. Use this date to evaluate upcoming appointments vs past visits.\n"
+            f"- For questions about medications, conditions, allergies, labs, appointments, or medical history, answer using the records above.\n"
+            f"- Always strictly respect recorded allergies and medical conditions. Never advise anything that conflicts with them.\n"
+            f"- If the information is not in the records, state that clearly and suggest asking their doctor.\n\n"
+        )
+
+    system_instruction += (
         f"Language Instruction: Respond to the patient in natural, fluent {target_lang_name}. "
         f"If the patient uses mixed languages or code-switching, reply in their dominant language ({target_lang_name}). "
         f"Keep your complete response under 40 words."
     )
 
+    # 4. Message History & User Message
+    history_list = list(_history[pid])
     create_kwargs = {
         "model": _configured_model,
         "messages": [
             {"role": "system", "content": system_instruction},
+            *history_list,
             {"role": "user",   "content": user_text.strip()},
         ],
         "max_tokens": MAX_OUTPUT_TOKENS,
         "temperature": 0.5,
     }
 
-    # 2. Call Gemini API with latency measurement
+    # 5. Call LLM API with latency measurement
     api_start = time.perf_counter()
     try:
         # Attempt with reasoning_effort="low" if supported by the model
@@ -289,6 +355,10 @@ async def generate_response(user_text: str, language: str = "en") -> LLMResponse
 
         reply = raw_content.strip()
 
+        # Update per-patient conversation history
+        _history[pid].append({"role": "user", "content": user_text.strip()})
+        _history[pid].append({"role": "assistant", "content": reply})
+
         if finish_reason == "length":
             log.warning(f"[LLM Warning] Response truncated by token limit after {api_elapsed:.2f}s (finish_reason='length')")
 
@@ -297,14 +367,17 @@ async def generate_response(user_text: str, language: str = "en") -> LLMResponse
 
         log.info(
             f"[LLM] Gemini ({_configured_model}) generated response in {api_elapsed:.2f}s | "
-            f"finish={finish_reason}{tokens_info} | lang={norm_lang}"
+            f"finish={finish_reason}{tokens_info} | lang={norm_lang} | patient={pid}"
         )
 
-        return LLMResponse(
-            reply,
-            source="gemini",
-            latency_s=api_elapsed,
-            finish_reason=finish_reason
+        return (
+            LLMResponse(
+                reply,
+                source="gemini",
+                latency_s=api_elapsed,
+                finish_reason=finish_reason
+            ),
+            sources
         )
 
     except Exception as e:
@@ -334,10 +407,30 @@ async def generate_response(user_text: str, language: str = "en") -> LLMResponse
         )
 
         fallback_msg = FALLBACK_RESPONSES.get(norm_lang, FALLBACK_RESPONSES["en"])
-        return LLMResponse(
-            fallback_msg,
-            source="fallback",
-            latency_s=api_elapsed,
-            error_category=error_cat,
-            status_code=status_code
+        return (
+            LLMResponse(
+                fallback_msg,
+                source="fallback",
+                latency_s=api_elapsed,
+                error_category=error_cat,
+                status_code=status_code
+            ),
+            sources
         )
+
+
+async def generate_response(
+    user_text: str,
+    language: str = "en",
+    patient_id: str | None = None,
+) -> LLMResponse:
+    """
+    Convenience wrapper returning LLMResponse directly.
+    Fully backwards compatible with generate_response(user_text, language).
+    """
+    reply, _ = await generate_response_with_sources(
+        user_text=user_text,
+        language=language,
+        patient_id=patient_id
+    )
+    return reply
