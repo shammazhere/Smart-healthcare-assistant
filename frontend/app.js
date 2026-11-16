@@ -201,6 +201,7 @@ function handleIncomingTelemetry(raw) {
     // AI Transcript Message
     if (data.transcript) {
       addTranscriptMessage('robot', data.transcript);
+      speakReply(data.transcript);
     }
 
   } catch (err) {
@@ -238,20 +239,126 @@ function triggerBeatAnimation(bpm) {
   p.style.animationDuration = `${duration}s`;
 }
 
+// ── Web Speech Recognition & Audio Capture ──────────────────────────────────
+let recognition = null;
+const speechSynth = window.speechSynthesis || null;
+
+function initSpeechRecognition() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) {
+    console.warn('[Speech] Web Speech API not supported in this browser.');
+    return null;
+  }
+  const sr = new SpeechRec();
+  sr.continuous = false;
+  sr.interimResults = true;
+  sr.lang = 'en-US';
+
+  sr.onstart = () => {
+    state.voiceActive = true;
+    elements.voiceMicBtn.classList.add('active');
+    updateAudioState(1);
+    elements.voiceHint.textContent = 'Listening… speak your symptom or question.';
+    sendWs({ voice: true });
+  };
+
+  sr.onresult = (event) => {
+    let interim = '';
+    let final = '';
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      if (event.results[i].isFinal) {
+        final += event.results[i][0].transcript;
+      } else {
+        interim += event.results[i][0].transcript;
+      }
+    }
+
+    if (interim) {
+      elements.voiceHint.textContent = `Hearing: "${interim}"`;
+    }
+
+    if (final && final.trim()) {
+      const recognizedText = final.trim();
+      elements.voiceHint.textContent = `Captured: "${recognizedText}"`;
+      addTranscriptMessage('user', recognizedText);
+      sendWs({ query: recognizedText });
+      updateAudioState(2);
+    }
+  };
+
+  sr.onerror = (event) => {
+    console.warn('[Speech Recognition Error]', event.error);
+    if (event.error === 'not-allowed') {
+      addTranscriptMessage('system', 'Microphone permission blocked. Please allow mic access in your browser address bar.');
+    } else if (event.error !== 'no-speech') {
+      addTranscriptMessage('system', `Voice input error: ${event.error}`);
+    }
+    stopVoiceRecognition();
+  };
+
+  sr.onend = () => {
+    stopVoiceRecognition();
+  };
+
+  return sr;
+}
+
+function stopVoiceRecognition() {
+  state.voiceActive = false;
+  elements.voiceMicBtn.classList.remove('active');
+  updateAudioState(0);
+  elements.voiceHint.textContent = 'Tap to speak with HealthBot';
+  sendWs({ voice: false });
+}
+
+function speakReply(text) {
+  if (!speechSynth) return;
+  try {
+    speechSynth.cancel();
+    const cleanText = text.replace(/[*_#`]/g, '').trim();
+    const utt = new SpeechSynthesisUtterance(cleanText);
+    utt.rate = 1.0;
+    utt.pitch = 1.0;
+    
+    // Pick an English or natural voice if available
+    const voices = speechSynth.getVoices();
+    const enVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Neural'))) || voices.find(v => v.lang.startsWith('en'));
+    if (enVoice) utt.voice = enVoice;
+
+    utt.onstart = () => updateAudioState(2);
+    utt.onend = () => updateAudioState(0);
+    utt.onerror = () => updateAudioState(0);
+
+    speechSynth.speak(utt);
+  } catch (e) {
+    console.warn('Speech synthesis error:', e);
+  }
+}
+
 // ── Voice Assistant Controls ─────────────────────────────────────────────────
 function toggleVoice() {
-  state.voiceActive = !state.voiceActive;
-  elements.voiceMicBtn.classList.toggle('active', state.voiceActive);
-
   if (state.voiceActive) {
-    elements.voiceHint.textContent = 'Listening to speech... tap to stop';
-    sendWs({ voice: true });
-    updateAudioState(1);
-    addTranscriptMessage('user', '🎙️ [Microphone Activated]');
+    if (recognition) {
+      try { recognition.stop(); } catch (e) {}
+    }
+    stopVoiceRecognition();
+    return;
+  }
+
+  if (!recognition) {
+    recognition = initSpeechRecognition();
+  }
+
+  if (recognition) {
+    try {
+      recognition.start();
+    } catch (e) {
+      console.warn('Recognition start error:', e);
+      try { recognition.stop(); } catch (_) {}
+      setTimeout(() => { try { recognition.start(); } catch (_) {} }, 200);
+    }
   } else {
-    elements.voiceHint.textContent = 'Tap to speak with HealthBot';
-    sendWs({ voice: false });
-    updateAudioState(0);
+    addTranscriptMessage('system', 'Speech recognition not available. Please use the Baymax Assistant page or type in the input box.');
   }
 }
 
