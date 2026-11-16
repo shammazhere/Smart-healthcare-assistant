@@ -59,7 +59,7 @@
 
   function addMessage(kind, text, pending) {
     const msg = h('div', 'dialogue-msg ' + kind + (pending ? ' pending' : ''));
-    const who = kind === 'user' ? 'You' : kind === 'robot' ? 'HealthBot' : 'System';
+    const who = kind === 'user' ? 'You' : kind === 'robot' ? 'Baymax' : 'System';
     const content = h('div', 'msg-content', text);
     msg.append(h('div', 'msg-author', who), content);
     el.chat.append(msg);
@@ -239,6 +239,9 @@
           addSystem('No patient records found. Run: python pdf_ingest.py <file.pdf>');
         } else if (state.patientId) {
           loadOverview(state.patientId);
+        }
+        if (!el.chat.querySelector('.dialogue-msg.robot')) {
+          addRobotMessage('Hi, I am Baymax, your personal healthcare assistant. How can I help you today?', []);
         }
         break;
       }
@@ -465,7 +468,7 @@
     }
     if (rms > rec.threshold) { rec.speech = true; rec.lastSpeech = now; }
 
-    if (rec.speech && now - rec.lastSpeech > 1400) stopRecording(true);        // finished talking
+    if (rec.speech && now - rec.lastSpeech > 750) stopRecording(true);         // finished talking
     else if (!rec.speech && now - rec.startedAt > 8000) stopRecording(false);   // nobody spoke
     else if (now - rec.startedAt > 30000) stopRecording(true);                  // safety limit
   }

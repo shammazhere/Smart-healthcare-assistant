@@ -65,6 +65,91 @@ SYNONYMS = {
     "afternoon": ["lunch"],
 }
 
+# ── Multilingual Cross-Lingual Concept Mappings (Kannada, Hindi, etc.) ────────
+INDIC_SYNONYMS: dict[str, list[str]] = {
+    # Medications & Dosing
+    "ಔಷಧ": ["medication", "medicine", "pill", "tablet"],
+    "ಔಷಧಿ": ["medication", "medicine", "pill", "tablet"],
+    "ಔಷಧಿಗಳ": ["medication", "medicine", "pill", "tablet"],
+    "ಮಾತ್ರೆ": ["medication", "medicine", "tablet"],
+    "ಗುಳಿಗೆ": ["medication", "medicine", "tablet"],
+    "ದವಾ": ["medication", "medicine", "tablet"],
+    "ದವಾಯಿ": ["medication", "medicine", "tablet"],
+    "ಸಮಯ": ["morning", "night", "breakfast", "dinner"],
+    "ಯಾವಾಗ": ["morning", "night", "breakfast", "dinner"],
+    "दवा": ["medication", "medicine", "tablet"],
+    "दवाई": ["medication", "medicine", "tablet"],
+    "औषधि": ["medication", "medicine", "tablet"],
+    "गोली": ["medication", "medicine", "tablet"],
+    "समय": ["morning", "night", "breakfast", "dinner"],
+    "कब": ["morning", "night", "breakfast", "dinner"],
+
+    # Doctors & Appointments
+    "ವೈದ್ಯ": ["doctor", "appointment", "visit"],
+    "ವೈದ್ಯರು": ["doctor", "appointment", "visit"],
+    "ಡಾಕ್ಟರ್": ["doctor", "appointment", "visit"],
+    "ಡಾಕ್ಟರ": ["doctor", "appointment", "visit"],
+    "ಭೇಟಿ": ["appointment", "visit", "date"],
+    "ಮುಂದಿನ": ["appointment", "next", "upcoming"],
+    "ಅಪಾಯಿಂಟ್ಮೆಂಟ್": ["appointment", "visit", "date"],
+    "ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್": ["appointment", "visit", "date"],
+    "ದಿನಾಂಕ": ["appointment", "date"],
+    "ದಿನ": ["appointment", "date"],
+    "डॉक्टर": ["doctor", "appointment", "visit"],
+    "चिकित्सक": ["doctor", "appointment", "visit"],
+    "मुलाकात": ["appointment", "visit", "date"],
+    "अपॉइंटमेंट": ["appointment", "visit", "date"],
+    "अगली": ["appointment", "next", "upcoming"],
+
+    # Allergies
+    "ಅಲರ್ಜಿ": ["allergy", "allergies", "reaction"],
+    "ಅಲರ್ಜಿಗಳು": ["allergy", "allergies", "reaction"],
+    "ಎಲರ್ಜಿ": ["allergy", "allergies", "reaction"],
+    "ತೊಂದರೆ": ["allergy", "reaction"],
+    "एलर्जी": ["allergy", "allergies", "reaction"],
+    "रिएक्शन": ["allergy", "allergies", "reaction"],
+
+    # Blood, Sugar, Vitals & Lab reports
+    "ಸಕ್ಕರೆ": ["sugar", "glucose", "diabetes", "hba1c"],
+    "ಶುಗರ್": ["sugar", "glucose", "diabetes", "hba1c"],
+    "ರಕ್ತ": ["blood", "pressure", "glucose"],
+    "ವರದಿ": ["lab", "result", "test", "report"],
+    "ಟೆಸ್ಟ್": ["lab", "result", "test"],
+    "ಪರೀಕ್ಷೆ": ["lab", "result", "test"],
+    "ರಕ್ತದೊತ್ತಡ": ["bp", "pressure", "hypertension"],
+    "ಶುಗರ್ ವರದಿ": ["sugar", "glucose", "hba1c"],
+    "शुगर": ["sugar", "glucose", "diabetes", "hba1c"],
+    "मधुमेह": ["sugar", "glucose", "diabetes", "hba1c"],
+    "रक्तचाप": ["bp", "pressure", "hypertension"],
+    "रिपोर्ट": ["lab", "result", "test", "report"],
+    "जांच": ["lab", "result", "test"],
+
+    # Surgeries & Pain
+    "ನೋವು": ["pain", "knee", "surgery", "condition"],
+    "ಮಂಡಿ": ["knee", "surgery", "pain"],
+    "ಶಸ್ತ್ರಚಿಕಿತ್ಸೆ": ["surgery", "procedure"],
+    "ಆಪರೇಷನ್": ["surgery", "procedure"],
+    "ಖಾಯಿಲೆ": ["condition", "disease"],
+    "ರೋಗ": ["condition", "disease"],
+    "ಕಿಡ್ನಿ": ["kidney", "renal"],
+    "ಗುಂಡಿಗೆ": ["heart", "cardiac"],
+    "दर्द": ["pain", "knee", "surgery"],
+    "घुटना": ["knee", "surgery", "pain"],
+    "सर्जरी": ["surgery", "procedure"],
+    "ऑपरेशन": ["surgery", "procedure"],
+    "बीमारी": ["condition", "disease"],
+
+    # Emergency
+    "ತುರ್ತು": ["emergency", "contact", "phone"],
+    "ಸಂಪರ್ಕ": ["emergency", "contact", "phone"],
+    "ಆಪತ್ಕಾಲೀನ": ["emergency", "contact", "phone"],
+    "ಫೋನ್": ["emergency", "phone"],
+    "ಇಮರ್ಜೆನ್ಸಿ": ["emergency", "contact"],
+    "इमरजेंसी": ["emergency", "contact", "phone"],
+    "आपातकालीन": ["emergency", "contact", "phone"],
+    "संपर्क": ["emergency", "contact", "phone"],
+}
+
 
 def _stem(w: str) -> str:
     for suf in ("ies", "es", "s", "ing", "ed"):
@@ -80,12 +165,26 @@ def tokenize(text: str) -> list[str]:
 
 def expand_query(question: str) -> list[str]:
     tokens = []
-    for w in re.findall(r"[a-z0-9]+", question.lower()):
+    q_lower = question.lower()
+
+    # 1. Indic cross-lingual mapping (Kannada, Hindi, etc.)
+    for indic_term, english_syns in INDIC_SYNONYMS.items():
+        if indic_term in q_lower:
+            for syn in english_syns:
+                tokens.append(_stem(syn))
+
+    # 2. English / ASCII tokenization
+    for w in re.findall(r"[a-z0-9]+", q_lower):
         if w in STOPWORDS:
             continue
         tokens.append(_stem(w))
         for syn in SYNONYMS.get(w, []):
             tokens.append(_stem(syn))
+
+    # 3. Fallback for non-ASCII queries that didn't hit explicit synonyms
+    if not tokens and any(ord(c) > 127 for c in question):
+        tokens = ["medic", "allerg", "condit", "appoint", "doctor"]
+
     return tokens
 
 

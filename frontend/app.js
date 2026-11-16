@@ -6,7 +6,7 @@
 // ── Application State ────────────────────────────────────────────────────────
 const state = {
   ws: null,
-  robotIp: localStorage.getItem('healthbot_ip') || window.location.hostname || '10.245.210.1',
+  robotIp: localStorage.getItem('healthbot_ip') || (window.location.host ? window.location.host : 'localhost:8765'),
   connected: false,
   voiceActive: false,
   activeDirection: null,
@@ -76,7 +76,7 @@ function toggleConnection() {
 }
 
 function connectWebSocket() {
-  const ip = elements.robotIpInput.value.trim() || 'localhost';
+  const ip = elements.robotIpInput.value.trim() || window.location.host || 'localhost:8765';
   const url = `ws://${ip}/ws/control`;
 
   updateConnectionStatus('connecting', 'Connecting...');

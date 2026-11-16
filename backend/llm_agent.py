@@ -5,6 +5,7 @@
 #   * Deterministic zero-latency emergency safety guardrails
 # ============================================================
 import os
+import re
 import time
 import logging
 from collections import defaultdict, deque
@@ -98,25 +99,39 @@ FALLBACK_RESPONSES: dict[str, str] = {
     "ur": "رابطہ کرنے میں دشواری ہو رہی ہے۔ براہ کرم دوبارہ کوشش کریں یا اپنے نگران سے رابطہ کریں۔",
 }
 
+# ── Physician Safety Disclaimers ──────────────────────────────────────────────
+PHYSICIAN_DISCLAIMERS: dict[str, str] = {
+    "en": "I am just a healthcare assistant, not a physician. Please consult your doctor for formal diagnosis.",
+    "hi": "मैं केवल एक स्वास्थ्य सहायक हूँ, चिकित्सक (डॉक्टर) नहीं। कृपया सही निदान के लिए अपने डॉक्टर से संपर्क करें।",
+    "kn": "ನಾನು ಕೇವಲ ಆರೋಗ್ಯ ಸಹಾಯಕ ಮಾತ್ರ, ವೈದ್ಯನಲ್ಲ. ದಯವಿಟ್ಟು ಸೂಕ್ತ ತಪಾಸಣೆ ಮತ್ತು ಸಲಹೆಗಾಗಿ ನಿಮ್ಮ ವೈದ್ಯರನ್ನು ಸಂಪರ್ಕಿಸಿ.",
+    "ta": "நான் ஒரு சுகாதார உதவியாளர் மட்டுமே, மருத்துவர் அல்ல. முறையான மருத்துவ ஆலோசனைக்கு உங்கள் மருத்துவரை அணுகவும்.",
+    "te": "నేను కేవలం ఆరోగ్య సహాయకుడిని మాత్రమే, వైద్యుడిని కాదు. దయచేసి సరైన వైద్య సలహా కోసం మీ వైద్యుడిని సంಪ್ರదించండి.",
+    "ml": "ഞാൻ ഒരു ആരോഗ്യ സഹായി മാത്രമാണ്, ഡോക്ടറല്ല. ശരിയായ ചികിത്സയ്ക്കായി നിങ്ങളുടെ ഡോക്ടറെ സമീപിക്കുക.",
+    "mr": "मी फक्त एक आरोग्य सहाय्यक आहे, डॉक्टर नाही. कृपया वैद्यकीय सल्ल्यासाठी आपल्या डॉक्टरांचा सल्ला घ्या.",
+    "gu": "હું માત્ર એક આરોગ્ય સહાયક છું, ડૉક્ટર નથી. કૃપા કરીને યોગ્ય તબીબી સલાહ માટે તમારા ડૉક્ટરની મુલાકાત લો.",
+    "bn": "আমি কেবল একজন স্বাস্থ্য সহকারী, চিকিৎসক নই। সঠিক পরামর্শের জন্য অনুগ্রহ করে আপনার ডাক্তারের সাথে যোগাযোগ করুন।",
+    "ur": "میں صرف ایک ہیلتھ کیئر اسسٹنٹ ہوں، معالج (ڈاکٹر) نہیں۔ براہ کرم مناسب طبی معائنے کے لیے اپنے ڈاکٹر سے رجوع کریں۔",
+}
+
 # ── System Prompt Template ───────────────────────────────────────────────────
 BASE_SYSTEM_PROMPT = """
-You are HealthBot, a friendly, empathetic healthcare assistant robot designed to support patients.
+You are Baymax, a friendly, empathetic personal healthcare assistant robot designed to support patients.
 
-Clinical Safety & Interaction Rules:
-- Keep every response strictly under 40 words (short responses are essential for speech).
-- Speak warmly, clearly, and reassuringly, as if talking to a recovering or elderly patient.
-- Provide general wellness information only; NEVER diagnose, prescribe medication, or give specific treatment advice.
-- Always remind users that you are an assistant robot and not a physician if they ask for diagnostic advice.
-- For severe symptoms or medical emergencies: immediately direct the patient to call emergency services or press their call button.
-- Topics supported: medication adherence reminders, hydration, sleep hygiene, gentle reassurance, and comfort check-ins.
+Persona & Clinical Safety Rules:
+- Identity: You are Baymax, a personal healthcare assistant. You speak warmly, simply, gently, and reassuringly.
+- Length: Keep every spoken response concise, helpful, and strictly under 40 words.
+- Tone: Speak in a comforting, friendly manner. Do not output internal thought notes, reasoning text, or markdown formatting.
+- Clinical Boundary: Provide general wellness information and support grounded in the patient's records; NEVER diagnose, prescribe medication, or give specific medical treatment.
+- Safety: If the patient asks for medical diagnosis, remind them you are an assistant robot, not a physician.
+- Emergency: For severe symptoms or medical emergencies, immediately direct the patient to call emergency services or press their call button.
 """.strip()
 
 # ── Default Client Settings ───────────────────────────────────────────────────
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 REQUEST_TIMEOUT_SECONDS = 20.0
-MAX_OUTPUT_TOKENS = 600
+MAX_OUTPUT_TOKENS = 1024
 DEFAULT_PATIENT_ID = os.getenv("DEFAULT_PATIENT_ID", "patient_001")
-HISTORY_TURNS = 4
+HISTORY_TURNS = 10
 
 _client: AsyncOpenAI | None = None
 _configured_model: str = DEFAULT_MODEL
@@ -158,6 +173,44 @@ def check_is_emergency(text: str) -> bool:
     """
     lower = text.lower()
     return any(kw in lower for kw in EMERGENCY_KEYWORDS)
+
+
+def detect_text_language(text: str) -> str:
+    """
+    Detect the primary language from Unicode script or transliterated keywords.
+    Returns a standard 2-letter language code ('kn', 'hi', 'ta', 'te', 'ml', 'mr', 'gu', 'bn', 'ur', 'en').
+    """
+    if not text:
+        return "en"
+    for char in text:
+        cp = ord(char)
+        if 0x0C80 <= cp <= 0x0CFF:
+            return "kn"  # Kannada script
+        elif 0x0900 <= cp <= 0x097F:
+            return "hi"  # Devanagari script (Hindi/Marathi)
+        elif 0x0B80 <= cp <= 0x0BFF:
+            return "ta"  # Tamil script
+        elif 0x0C00 <= cp <= 0x0C7F:
+            return "te"  # Telugu script
+        elif 0x0D00 <= cp <= 0x0D7F:
+            return "ml"  # Malayalam script
+        elif 0x0980 <= cp <= 0x09FF:
+            return "bn"  # Bengali script
+        elif 0x0A80 <= cp <= 0x0AFF:
+            return "gu"  # Gujarati script
+        elif 0x0600 <= cp <= 0x06FF:
+            return "ur"  # Arabic/Urdu script
+
+    lower = text.lower()
+    kn_words = ["namaskara", "hegidira", "aushadhi", "oushadha", "dava", "vaidya", "yavaga", "nanage", "beku"]
+    hi_words = ["namaste", "dawa", "dawakhana", "dard", "kya", "kab", "kaise", "hoga", "takleef", "seene"]
+    tokens = set(lower.split())
+    if any(w in tokens for w in kn_words):
+        return "kn"
+    if any(w in tokens for w in hi_words):
+        return "hi"
+
+    return "en"
 
 
 def get_llm_config() -> tuple[str, str, str]:
@@ -237,6 +290,17 @@ async def generate_response_with_sources(
         )
 
     norm_lang = language.lower().strip() if language else "en"
+    if "-" in norm_lang:
+        norm_lang = norm_lang.split("-")[0]
+    if "_" in norm_lang:
+        norm_lang = norm_lang.split("_")[0]
+
+    # Auto-detect Indic script from text if norm_lang is "en" or not in LANGUAGE_NAMES
+    if norm_lang not in LANGUAGE_NAMES or norm_lang == "en":
+        detected_script = detect_text_language(user_text)
+        if detected_script != "en":
+            norm_lang = detected_script
+
     if norm_lang not in LANGUAGE_NAMES:
         norm_lang = "en"
 
@@ -301,11 +365,50 @@ async def generate_response_with_sources(
             f"- If the information is not in the records, state that clearly and suggest asking their doctor.\n\n"
         )
 
+    intro_hint = {
+        "en": "Hi, I am Baymax, your personal healthcare assistant.",
+        "kn": "ನಮಸ್ಕಾರ, ನಾನು ಬೇಮ್ಯಾಕ್ಸ್, ನಿಮ್ಮ ವೈಯಕ್ತಿಕ ಆರೋಗ್ಯ ಸಹಾಯಕ.",
+        "hi": "नमस्ते, मैं बेमैक्स हूँ, आपका व्यक्तिगत स्वास्थ्य सहायक।",
+        "ta": "வணக்கம், நான் பேமேக்ஸ், உங்கள் தனிப்பட்ட சுகாதார உதவியாளர்.",
+        "te": "నమస్కారం, నేను బేమాక్స్, మీ వ్యక్తిగత ఆరోగ్య సహాయకుడిని.",
+        "ml": "നമസ്കാരം, ഞാൻ ബേമാക്സ്, നിങ്ങളുടെ വ്യക്തിഗത ആരോഗ്യ സഹായി.",
+        "mr": "नमस्कार, मी बेमॅक्स, आपला वैयक्तिक आरोग्य सहाय्यक.",
+        "gu": "નમસ્તે, હું બેમેક્સ છું, તમારો વ્યક્તિગત આરોગ્ય સહાયક.",
+        "bn": "হ্যালো, আমি বেম্যাক্স, আপনার व्यक्तिगत স্বাস্থ্য সহকারী।",
+        "ur": "ہیلو، میں بے میکس ہوں، آپ کا ذاتی ہیلتھ کیئر اسسٹنٹ۔",
+    }.get(norm_lang, "Hi, I am Baymax, your personal healthcare assistant.")
+
+    disclaimer_text = PHYSICIAN_DISCLAIMERS.get(norm_lang, PHYSICIAN_DISCLAIMERS["en"])
+    is_first_turn = (len(_history[pid]) == 0)
+
     system_instruction += (
-        f"Language Instruction: Respond to the patient in natural, fluent {target_lang_name}. "
-        f"If the patient uses mixed languages or code-switching, reply in their dominant language ({target_lang_name}). "
-        f"Keep your complete response under 40 words."
+        f"BAYMAX CLINICAL TRIAGE & SYMPTOM ASSESSMENT PROTOCOL:\n"
+        f"1. Health Record Questions (e.g. medications, appointment dates, allergies, doctor notes):\n"
+        f"   - Answer directly, helpfully, and concisely using the patient's records above.\n\n"
+        f"2. Patient Symptom Complaints & Health Concerns (e.g. pain, headache, stomach ache, fever, dizziness, nausea):\n"
+        f"   - Do NOT provide an immediate one-shot diagnosis.\n"
+        f"   - Interactive Triage Phase: Ask 2 to 4 clarifying diagnostic questions back (ONE concise question per turn) to pinpoint the exact cause:\n"
+        f"     * Question 1: Severity on a scale of 1 to 10 or exact location of the discomfort.\n"
+        f"     * Question 2: Onset, duration, and lifestyle factors (e.g. hydration, food intake, sleep hours, stress).\n"
+        f"     * Question 3: Associated symptoms (e.g. fever, nausea, vomiting, dizziness, light sensitivity).\n"
+        f"   - Pinpoint & Conclusion Phase (once 2 to 4 clarifying questions have been answered across turns, or once sufficient details are provided):\n"
+        f"     * Synthesize their answers and explain the pinpointed possible cause/reason clearly (e.g., tension headache from dehydration and lack of sleep, gastric irritation from oily food, muscle fatigue).\n"
+        f"     * Offer gentle comfort self-care advice.\n"
+        f"     * You MUST conclude your final response with this exact disclaimer: \"{disclaimer_text}\"\n\n"
+        f"3. Language & Tone Guidelines:\n"
+        f"   - Tone: Caring, empathetic, gentle, reassuring.\n"
+        f"   - Language: Respond 100% in natural, fluent {target_lang_name}. Do NOT output ANY English words if language is not English.\n"
+        f"   - Length: When asking a triage question, keep it concise under 35 words. In the final conclusion phase, keep it under 65 words.\n"
     )
+
+    if is_first_turn:
+        system_instruction += (
+            f"   - This is the very first turn of the conversation. You MUST start your response with: \"{intro_hint}\"\n"
+        )
+    else:
+        system_instruction += (
+            f"   - This is an ongoing conversation. Do NOT repeat your introductory greeting.\n"
+        )
 
     # 4. Message History & User Message
     history_list = list(_history[pid])
@@ -317,7 +420,7 @@ async def generate_response_with_sources(
             {"role": "user",   "content": user_text.strip()},
         ],
         "max_tokens": MAX_OUTPUT_TOKENS,
-        "temperature": 0.5,
+        "temperature": 0.3,
     }
 
     # 5. Call LLM API with latency measurement
@@ -354,6 +457,49 @@ async def generate_response_with_sources(
             raise RuntimeError(f"Empty content from model (finish_reason={finish_reason})")
 
         reply = raw_content.strip()
+        if is_first_turn:
+            if norm_lang != "en":
+                reply = re.sub(r"^(Hello|Hi|Hey)[^.!?\n]*Baymax[^.!?\n]*[.!?]\s*", "", reply, flags=re.IGNORECASE).strip()
+                if not reply.startswith(intro_hint):
+                    if norm_lang == "hi":
+                        reply = re.sub(r"^(नमस्ते|नमस्कार|प्रणाम)?[!,\s]*(मैं\s+बेमैक्स\s+हूँ[,\s]*(आपका\s+व्यक्तिगत\s+स्वास्थ्य\s+सहायक)?[.!?।,]?)?\s*", "", reply).strip()
+                    elif norm_lang == "kn":
+                        reply = re.sub(r"^(ನಮಸ್ಕಾರ)?[!,\s]*(ನಾನು\s+ಬೇಮ್ಯಾಕ್ಸ್[,\s]*(ನಿಮ್ಮ\s+ವೈಯಕ್ತಿಕ\s+ಆರೋಗ್ಯ\s+ಸಹಾಯಕ)?[.!?।,]?)?\s*", "", reply).strip()
+                    elif norm_lang == "ta":
+                        reply = re.sub(r"^(வணக்கம்)?[!,\s]*(நான்\s+பேமேக்ஸ்[,\s]*[^.!?\n]*[.!?]?)?\s*", "", reply).strip()
+                    elif norm_lang == "te":
+                        reply = re.sub(r"^(నమస్కారం)?[!,\s]*(నేను\s+బేమాక్స్[,\s]*[^.!?\n]*[.!?]?)?\s*", "", reply).strip()
+                    elif norm_lang == "ml":
+                        reply = re.sub(r"^(നമസ്കാരം)?[!,\s]*(ഞാൻ\s+ബേമാക്സ്[,\s]*[^.!?\n]*[.!?]?)?\s*", "", reply).strip()
+                    reply = f"{intro_hint} {reply}".strip()
+            else:
+                if not reply.startswith(intro_hint):
+                    reply = re.sub(r"^(Hello|Hi|Hey)?[!,\s]*(I\s+am\s+Baymax[,\s]*(your\s+personal\s+healthcare\s+assistant)?[.!?]?)?\s*", "", reply, flags=re.IGNORECASE).strip()
+                    reply = f"{intro_hint} {reply}".strip()
+        else:
+            # On follow-up triage questions: avoid repeating the introductory greeting
+            if norm_lang != "en":
+                reply = re.sub(r"^(Hello|Hi|Hey)[^.!?\n]*Baymax[^.!?\n]*[.!?]\s*", "", reply, flags=re.IGNORECASE).strip()
+                if norm_lang == "hi":
+                    reply = re.sub(r"^(नमस्ते|नमस्कार|प्रणाम)?[!,\s]*(मैं\s+बेमैक्स\s+हूँ[,\s]*(आपका\s+व्यक्तिगत\s+स्वास्थ्य\s+सहायक)?[.!?।,]?)?\s*", "", reply).strip()
+                elif norm_lang == "kn":
+                    reply = re.sub(r"^(ನಮಸ್ಕಾರ)?[!,\s]*(ನಾನು\s+ಬೇಮ್ಯಾಕ್ಸ್[,\s]*(ನಿಮ್ಮ\s+ವೈಯಕ್ತಿಕ\s+ಆರೋಗ್ಯ\s+ಸಹಾಯಕ)?[.!?।,]?)?\s*", "", reply).strip()
+            else:
+                reply = re.sub(r"^(Hello|Hi|Hey)?[!,\s]*(I\s+am\s+Baymax[,\s]*(your\s+personal\s+healthcare\s+assistant)?[.!?]?)?\s*", "", reply, flags=re.IGNORECASE).strip()
+
+        # If this turn pinpointed the cause / concludes assessment, ensure the physician disclaimer is present
+        user_turns_count = len([m for m in _history[pid] if m.get("role") == "user"])
+        cause_markers = (
+            "कारण", "ಕಾರಣ", "cause", "reason", "due to", "because of", "ಆಧಾರದ ಮೇಲೆ",
+            "उपाय", "आराम", "ವಿವರಣೆ", "காரணம்", "കാരണം"
+        )
+        is_conclusion = any(cm in reply for cm in cause_markers) or user_turns_count >= 2
+        disclaimer_markers = (
+            "सहायक हूँ", "ವೈದ್ಯನಲ್ಲ", "physician", "doctor", "चिकित्सक",
+            "மருத்துவர்", "వైద్యుడిని", "ഡോക്ടറല്ല", "डॉक्टर"
+        )
+        if is_conclusion and not any(dm in reply for dm in disclaimer_markers):
+            reply = f"{reply}\n\n{disclaimer_text}".strip()
 
         # Update per-patient conversation history
         _history[pid].append({"role": "user", "content": user_text.strip()})

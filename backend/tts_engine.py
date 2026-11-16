@@ -29,8 +29,8 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-# ── Baymax-Inspired English Settings ──────────────────────────────────────────
-DEFAULT_VOICE = os.getenv("TTS_DEFAULT_VOICE", "en-US-AndrewMultilingualNeural")
+# ── Baymax-Inspired Settings ──────────────────────────────────────────────────
+DEFAULT_VOICE = os.getenv("TTS_DEFAULT_VOICE", "en-US-GuyNeural")
 DEFAULT_RATE  = os.getenv("TTS_DEFAULT_RATE", "-12%")   # Slower rate for deliberate pacing
 DEFAULT_PITCH = os.getenv("TTS_DEFAULT_PITCH", "-5Hz")   # Slightly lower pitch for grounded warmth
 TARGET_RATE   = 16000    # Hz — required by ESP32-S3 I2S speaker
@@ -89,27 +89,69 @@ def resolve_sarvam_language(lang: str | None) -> str:
     return SARVAM_LANG_MAP.get(clean, "en-IN")
 
 
+def get_supported_voices() -> dict[str, str]:
+    """Return dictionary of supported language-to-voice mappings."""
+    return VOICE_MAP.copy()
+
+
 def resolve_voice(
     language: str | None = None,
     voice: str | None = None
 ) -> tuple[str, str, str]:
-    """Resolve Edge-TTS voice identifier, rate, and pitch."""
+    """Resolve Edge-TTS voice identifier, rate, and pitch configured for Baymax caring robot."""
     if voice and voice.strip():
         v = voice.strip()
         if v.lower() in VOICE_MAP:
             v = VOICE_MAP[v.lower()]
-        if v == DEFAULT_VOICE:
-            return v, DEFAULT_RATE, DEFAULT_PITCH
-        return v, "+0%", "+0Hz"
+        return v, DEFAULT_RATE, DEFAULT_PITCH
 
     if language and language.strip():
-        lang_key = language.strip().lower()
+        lang_key = language.strip().lower().split("-")[0].split("_")[0]
         v = VOICE_MAP.get(lang_key, DEFAULT_VOICE)
-        if v == DEFAULT_VOICE or lang_key in ("en", "english", "en-us", "en-in"):
-            return v, DEFAULT_RATE, DEFAULT_PITCH
-        return v, "+0%", "+0Hz"
+        return v, DEFAULT_RATE, DEFAULT_PITCH
 
     return DEFAULT_VOICE, DEFAULT_RATE, DEFAULT_PITCH
+
+
+def decode_mp3_to_float32(mp3_buffer: io.BytesIO) -> tuple[np.ndarray, int]:
+    """
+    Decode in-memory MP3 audio bytes to a float32 numpy array.
+    Uses soundfile as primary decoder, with fallback handling for environments
+    where libsndfile lacks built-in MP3 decoding.
+    """
+    mp3_buffer.seek(0)
+    try:
+        import soundfile as sf
+        audio_float, sr = sf.read(mp3_buffer, dtype="float32", always_2d=False)
+        return audio_float, sr
+    except Exception as sf_err:
+        log.warning(f"[TTS] soundfile MP3 read failed: {sf_err}. Attempting fallback decoders...")
+        mp3_buffer.seek(0)
+        raw_mp3 = mp3_buffer.read()
+
+        try:
+            import miniaudio
+            decoded = miniaudio.mp3_read_f32(raw_mp3)
+            samples = np.array(decoded.samples, dtype=np.float32)
+            if decoded.nchannels > 1:
+                samples = samples.reshape(-1, decoded.nchannels)
+            return samples, decoded.sample_rate
+        except ImportError:
+            pass
+
+        try:
+            from pydub import AudioSegment
+            seg = AudioSegment.from_file(io.BytesIO(raw_mp3), format="mp3")
+            samples = np.array(seg.get_array_of_samples(), dtype=np.float32) / 32768.0
+            if seg.channels > 1:
+                samples = samples.reshape(-1, seg.channels)
+            return samples, seg.frame_rate
+        except ImportError:
+            pass
+
+        raise RuntimeError(
+            f"Failed to decode MP3 stream. Ensure libsndfile with MP3 support is installed. (Error: {sf_err})"
+        )
 
 
 def decode_wav_to_pcm16(wav_bytes: bytes, target_sr: int = 16000) -> bytes:
@@ -154,7 +196,7 @@ async def synthesize_sarvam_audio(
     language: str | None = None,
     custom_audio_path: str | None = None,
     custom_audio_bytes: bytes | None = None,
-    speaker: str = "meera",
+    speaker: str | None = None,
 ) -> bytes | None:
     """
     Call Sarvam AI TTS API.
@@ -167,17 +209,20 @@ async def synthesize_sarvam_audio(
 
     target_lang = resolve_sarvam_language(language)
     url = "https://api.sarvam.ai/text-to-speech"
+    default_speaker = os.getenv("SARVAM_DEFAULT_SPEAKER", "aditya")
+    use_speaker = speaker or default_speaker
 
+    # Baymax-tuned parameters: calm male speaker, deliberate pacing (-12%), lowered pitch
     payload = {
         "inputs": [text.strip()],
         "target_language_code": target_lang,
-        "speaker": speaker,
-        "pitch": 0,
-        "pace": 1.15,
-        "loudness": 1.5,
+        "speaker": use_speaker,
+        "pitch": float(os.getenv("SARVAM_PITCH", "-0.2")),
+        "pace": float(os.getenv("SARVAM_PACE", "0.88")),
+        "loudness": 1.0,
         "speech_sample_rate": TARGET_RATE,
         "enable_preprocessing": True,
-        "model": "bulbul:v1",
+        "model": "bulbul:v3",
     }
 
     # Custom voice cloning support (bulbul:v2)
@@ -247,14 +292,12 @@ async def synthesize_edge_chunks(
         return
 
     mp3_buffer.seek(0)
-    raw_mp3 = mp3_buffer.read()
-    if not raw_mp3:
+    if mp3_buffer.getbuffer().nbytes == 0:
         return
 
-    # Convert MP3 to PCM using soundfile or miniaudio
+    # Convert MP3 to PCM using decode_mp3_to_float32
     try:
-        import soundfile as sf
-        audio_float, sr = sf.read(io.BytesIO(raw_mp3), dtype="float32", always_2d=False)
+        audio_float, sr = decode_mp3_to_float32(mp3_buffer)
         if audio_float.ndim > 1:
             audio_float = audio_float.mean(axis=1)
         if sr != TARGET_RATE:
@@ -280,16 +323,18 @@ async def synthesize_chunks(
 ) -> AsyncGenerator[bytes, None]:
     """
     Hybrid streaming TTS:
-      1. Primary: Sarvam AI Multilingual TTS + Custom Voice (if SARVAM_API_KEY configured)
-      2. Fallback: Edge-TTS (Baymax-tuned English + Indian neural voices)
+      - For English / default: Uses the custom Baymax voice (Edge-TTS calm warm delivery).
+      - For Indian regional languages (or if Sarvam custom voice sample is supplied): Uses Sarvam AI.
     Yields 16-bit 16 kHz signed mono little-endian PCM chunks (2048 bytes).
     """
     if not text or not text.strip():
         return
 
-    # 1. Primary: Sarvam AI
-    if is_sarvam_available():
-        custom_ref = custom_audio_path or os.getenv("SARVAM_CUSTOM_VOICE_SAMPLE")
+    lang_clean = (language or "en").strip().lower()
+    custom_ref = custom_audio_path or os.getenv("SARVAM_CUSTOM_VOICE_SAMPLE")
+
+    # If custom voice reference is provided, or an Indian language is requested with Sarvam available:
+    if is_sarvam_available() and (custom_ref or (lang_clean not in ("en", "english", "en-us", "en-in"))):
         wav_data = await synthesize_sarvam_audio(
             text=text,
             language=language,
@@ -298,14 +343,14 @@ async def synthesize_chunks(
         if wav_data:
             pcm_bytes = decode_wav_to_pcm16(wav_data, target_sr=TARGET_RATE)
             if pcm_bytes:
-                log.info(f"[TTS] Streamed {len(pcm_bytes)} PCM bytes via Sarvam AI ({language or 'en'})")
+                log.info(f"[TTS] Streamed {len(pcm_bytes)} PCM bytes via Sarvam AI ({language})")
                 for i in range(0, len(pcm_bytes), CHUNK_BYTES):
                     yield pcm_bytes[i : i + CHUNK_BYTES]
                 return
-        log.warning("[TTS] Sarvam synthesis unavailable or failed — falling back to Edge-TTS")
+        log.warning("[TTS] Sarvam synthesis unavailable — falling back to Edge-TTS")
 
-    # 2. Fallback: Edge-TTS
-    log.info(f"[TTS] Synthesizing via Edge-TTS fallback ({language or 'en'})")
+    # Baymax-tuned English / Edge-TTS
+    log.info(f"[TTS] Synthesizing via Edge-TTS Baymax voice ({language or 'en'})")
     async for chunk in synthesize_edge_chunks(
         text=text,
         voice=voice,

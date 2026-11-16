@@ -122,24 +122,23 @@ async def transcribe_sarvam(
     sample_rate: int = 16000,
     language: str | None = None
 ) -> TranscriptionResult | None:
-    """Transcribe audio via Sarvam AI saarika:v2 API."""
+    """Transcribe audio via Sarvam AI saaras:v3 API with automatic Indian language detection."""
     api_key = os.getenv("SARVAM_API_KEY", "").strip()
     if not api_key:
         return None
 
     wav_bytes = pcm_to_wav_bytes(pcm_bytes, sample_rate=sample_rate)
-    url = "https://api.sarvam.ai/speech-to-text-translate"
+    url = "https://api.sarvam.ai/speech-to-text"
     headers = {"api-subscription-key": api_key}
-
-    # Target language code
-    lang_code = f"{language}-IN" if language and len(language) == 2 else "hi-IN"
 
     files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
     data = {
-        "language_code": lang_code,
-        "model": "saarika:v2",
+        "model": "saaras:v3",
         "with_timestamps": "false",
     }
+    if language and language.strip() and language.strip().lower() not in ("auto", "unknown", "none"):
+        clean_l = language.strip().lower()
+        data["language_code"] = f"{clean_l}-IN" if len(clean_l) == 2 else clean_l
 
     def _call_sarvam_stt():
         resp = requests.post(url, headers=headers, files=files, data=data, timeout=15.0)
@@ -150,11 +149,13 @@ async def transcribe_sarvam(
         result = await asyncio.to_thread(_call_sarvam_stt)
         transcript = result.get("transcript") or result.get("translation") or ""
         transcript = transcript.strip()
-        detected_lang = normalize_language_code(result.get("language_code", language or "hi"))
+        raw_lang = result.get("language_code") or (language or "en")
+        detected_lang = normalize_language_code(raw_lang.split("-")[0].lower())
+        prob = float(result.get("language_probability", 0.98))
 
         if transcript:
             log.info(f"[Sarvam STT] Transcribed ({detected_lang}): '{transcript}'")
-            return TranscriptionResult(transcript, detected_lang, confidence=0.98, source="sarvam")
+            return TranscriptionResult(transcript, detected_lang, confidence=prob, source="sarvam")
         return None
     except Exception as e:
         log.warning(f"[Sarvam STT Error] API call failed: {e}")

@@ -1,23 +1,35 @@
 # Git ignore patterns for Healthcare Robot project
-# ── Build artifacts
+# ── Virtual Environments
+venv/
+.venv/
+backend/venv/
+backend/.venv/
+env/
+*/venv/
+*/.venv/
+
+# ── Build artifacts & Caches
 firmware/.pio/
 firmware/.vscode/
-
-# ── Python
+__pycache__/
 backend/__pycache__/
 backend/*/__pycache__/
 **/__pycache__/
 backend/*.pyc
 *.pyc
-backend/.env
-backend/venv/
-backend/.venv/
+*.pyo
+*.pyd
 
-# ── Credentials
+# ── Credentials & Secrets
+.env
 *.env
+backend/.env
 *.key
 secrets.h
 
-# ── IDE
+# ── IDE & OS
 .vscode/
+.idea/
 *.code-workspace
+.DS_Store
+Thumbs.db

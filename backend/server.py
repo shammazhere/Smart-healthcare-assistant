@@ -10,6 +10,7 @@
 import os
 import sys
 import json
+import math
 import asyncio
 import logging
 from pathlib import Path
@@ -42,6 +43,7 @@ else:
     load_dotenv(override=True)
 
 try:
+    import baymax_tts
     from stt_engine import (
         load_model as load_stt,
         transcribe_async,
@@ -56,7 +58,9 @@ try:
         load_llm,
         generate_response,
         generate_response_with_sources,
+        detect_text_language,
         get_llm_config,
+        reset_history,
         DEFAULT_PATIENT_ID,
     )
     from tts_engine import (
@@ -70,6 +74,7 @@ try:
     )
     from rag_engine import get_store
 except ImportError:
+    from backend import baymax_tts
     from backend.stt_engine import (
         load_model as load_stt,
         transcribe_async,
@@ -84,7 +89,9 @@ except ImportError:
         load_llm,
         generate_response,
         generate_response_with_sources,
+        detect_text_language,
         get_llm_config,
+        reset_history,
         DEFAULT_PATIENT_ID,
     )
     from backend.tts_engine import (
@@ -128,6 +135,21 @@ async def lifespan(app: FastAPI):
     tts_mode = "Sarvam AI (primary)" if is_sarvam_tts() else f"Edge-TTS ({DEFAULT_VOICE})"
     stt_mode = "Sarvam AI (primary)" if is_sarvam_stt() else "faster-whisper (local)"
     log.info(f"✅ AI Voice Gateway ready — TTS: {tts_mode} | STT: {stt_mode}")
+
+    # Asynchronously pre-warm localized Baymax intros for instant voice response
+    async def _warm_intros():
+        for lang in ("hi", "kn", "en"):
+            txt = LOCALIZED_INTROS.get(lang)
+            if txt and lang not in _INTRO_AUDIO_CACHE:
+                try:
+                    res = await baymax_tts._synth(txt, language=lang)
+                    if res:
+                        _INTRO_AUDIO_CACHE[lang] = (res, "mp3")
+                        log.info(f"⚡ Pre-warmed {lang} Baymax intro audio ({len(res)} bytes)")
+                except Exception as w_err:
+                    log.debug(f"Intro pre-warming error for {lang}: {w_err}")
+    asyncio.create_task(_warm_intros())
+
     yield
     log.info("Shutting down AI Gateway")
 
@@ -310,6 +332,399 @@ async def process_utterance(ws: WebSocket, pcm_bytes: bytes, client_id: str, pat
         log.error(f"[{client_id}] TTS streaming error: {e}")
 
 
+# ── Audio Synthesis Helper ───────────────────────────────────────────────────
+async def _synthesize_to_wav(text: str, language: str = "en") -> bytes | None:
+    """Synthesize text into WAV audio bytes using Sarvam AI or Edge-TTS fallback."""
+    if not text or not text.strip():
+        return None
+    if is_sarvam_tts():
+        wav_data = await synthesize_sarvam_audio(text.strip(), language=language)
+        if wav_data:
+            return wav_data
+    chunks = []
+    async for c in synthesize_chunks(text.strip(), language=language):
+        chunks.append(c)
+    if chunks:
+        pcm_all = b"".join(chunks)
+        return pcm_to_wav_bytes(pcm_all, sample_rate=SAMPLE_RATE)
+    return None
+
+
+# ── Web Voice Helper (Baymax-Tuned Voice & Multilingual Sarvam AI) ──────────
+REGIONAL_VOICES: dict[str, str] = {
+    "kn": "kn-IN-GaganNeural",
+    "hi": "hi-IN-MadhurNeural",
+    "ta": "ta-IN-ValluvarNeural",
+    "te": "te-IN-MohanNeural",
+    "ml": "ml-IN-MidhunNeural",
+    "mr": "mr-IN-ManoharNeural",
+    "gu": "gu-IN-NiranjanNeural",
+    "bn": "bn-IN-BashkarNeural",
+    "ur": "ur-IN-SalmanNeural",
+}
+
+LOCALIZED_INTROS: dict[str, str] = {
+    "en": "Hi, I am Baymax, your personal healthcare assistant.",
+    "hi": "नमस्ते, मैं बेमैक्स हूँ, आपका व्यक्तिगत स्वास्थ्य सहायक।",
+    "kn": "ನಮಸ್ಕಾರ, ನಾನು ಬೇಮ್ಯಾಕ್ಸ್, ನಿಮ್ಮ ವೈಯಕ್ತಿಕ ಆರೋಗ್ಯ ಸಹಾಯಕ.",
+    "ta": "வணக்கம், நான் பேமேக்ஸ், உங்கள் தனிப்பட்ட சுகாதார உதவியாளர்.",
+    "te": "నమస్కారం, నేను బేమాక్స్, మీ వ్యక్తిగత ఆరోగ్య సహాయకుడిని.",
+    "ml": "നമസ്കാരം, ഞാൻ ബേമാക്സ്, നിങ്ങളുടെ വ്യക്തിഗത ആരോഗ്യ സഹായി.",
+    "mr": "नमस्कार, मी बेमॅक्स, आपला वैयक्तिक आरोग्य सहाय्यक.",
+    "gu": "નમસ્તે, હું બેમેક્સ છું, તમારો વ્યક્તિગત આરોગ્ય સહાયક.",
+    "bn": "নমস্কার, আমি বেম্যাক্স, আপনার ব্যক্তিগত স্বাস্থ্য সহকারী।",
+    "ur": "ہیلو، میں بے میکس ہوں، آپ کا ذاتی ہیلتھ کیئر اسسٹنٹ۔",
+}
+
+_INTRO_AUDIO_CACHE: dict[str, tuple[bytes, str]] = {}
+
+
+async def _speak_web_baymax(ws: WebSocket, text: str, language: str = "en"):
+    """
+    Ultra-low-latency two-stage speech delivery in Baymax voice:
+      - Every language (English, Kannada, Hindi, etc.) is voiced by its dedicated
+        Baymax male neural voice with calm pacing (-12%) and deepened pitch (-5Hz).
+      - Plays cached localized Baymax introduction immediately (0ms delay).
+      - Synthesizes and chains subsequent sentences in the background with zero gap.
+    """
+    if not text or not text.strip():
+        return
+
+    clean_text = text.strip()
+    norm_lang = (language or "en").lower().split("-")[0].split("_")[0]
+
+    # Auto-detect Indic scripts if language is "en" or unspecified
+    has_indic = any(0x0600 <= ord(c) <= 0x0DFF for c in clean_text)
+    if has_indic and norm_lang == "en":
+        norm_lang = detect_text_language(clean_text)
+
+    await ws.send_text(json.dumps({"type": "status", "state": "speaking"}))
+    try:
+        intro_text = LOCALIZED_INTROS.get(norm_lang, "")
+        seq = 0
+
+        # Fast two-stage delivery: if text starts with intro, dispatch cached intro audio immediately (0ms)
+        if intro_text and clean_text.startswith(intro_text):
+            body_text = clean_text[len(intro_text):].strip()
+
+            # 1. Dispatch pre-cached Baymax intro audio immediately
+            intro_cached = _INTRO_AUDIO_CACHE.get(norm_lang)
+            if not intro_cached:
+                try:
+                    intro_bytes = await baymax_tts._synth(intro_text, language=norm_lang)
+                    if intro_bytes:
+                        intro_cached = (intro_bytes, "mp3")
+                        _INTRO_AUDIO_CACHE[norm_lang] = intro_cached
+                except Exception as synth_err:
+                    log.warning(f"Intro synthesis error: {synth_err}")
+
+            if intro_cached:
+                await ws.send_text(json.dumps({"type": "audio", "seq": seq, "format": intro_cached[1]}))
+                await ws.send_bytes(intro_cached[0])
+                seq += 1
+
+            # 2. Stream remaining body sentences in Baymax voice while intro is already playing in browser
+            if body_text:
+                async for mp3 in baymax_tts.synthesize_sentences(body_text, language=norm_lang):
+                    await ws.send_text(json.dumps({"type": "audio", "seq": seq, "format": "mp3"}))
+                    await ws.send_bytes(mp3)
+                    seq += 1
+        else:
+            # Stream entire text sentence-by-sentence in Baymax voice
+            async for mp3 in baymax_tts.synthesize_sentences(clean_text, language=norm_lang):
+                await ws.send_text(json.dumps({"type": "audio", "seq": seq, "format": "mp3"}))
+                await ws.send_bytes(mp3)
+                seq += 1
+
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        log.error(f"[Baymax Voice Error] {e}")
+        await ws.send_text(json.dumps({"type": "error", "message": f"Voice is unavailable: {e}"}))
+    await ws.send_text(json.dumps({"type": "done"}))
+    await ws.send_text(json.dumps({"type": "status", "state": "idle"}))
+
+
+# ── Web Assistant WebSocket Endpoint (/ws/web) ────────────────────────────────
+@app.websocket("/ws/web")
+async def web_ws(ws: WebSocket):
+    """
+    WebSocket endpoint for HealthBot Assistant Web UI (assistant.html).
+    Coordinates streaming mic audio (16 kHz PCM) / typed queries,
+    RAG health record grounding, and Baymax caring robot voice speech.
+    """
+    await ws.accept()
+    client_id = f"web_{ws.client.host}:{ws.client.port}"
+    active_connections[client_id] = ws
+    log.info(f"[{client_id}] Web Assistant connected")
+
+    client_patient_id = DEFAULT_PATIENT_ID
+    audio_buffer = bytearray()
+
+    try:
+        # Initial greeting & patient catalog handshake
+        store = get_store()
+        patients = store.patient_list()
+        sarvam_stt_on = is_sarvam_stt()
+        stt_model_size = os.getenv("WHISPER_MODEL_SIZE", DEFAULT_MODEL_SIZE)
+
+        await ws.send_text(json.dumps({
+            "type": "ready",
+            "patient_id": client_patient_id,
+            "patients": patients,
+            "stt": {
+                "backend": "Sarvam AI" if sarvam_stt_on else "faster-whisper",
+                "model": "saaras:v3" if sarvam_stt_on else stt_model_size,
+            },
+            "tts": baymax_tts.info()
+        }))
+
+        while True:
+            message = await ws.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+
+            # 1. Handle incoming binary audio chunk from browser microphone
+            if "bytes" in message and message["bytes"]:
+                audio_buffer.extend(message["bytes"])
+                continue
+
+            # 2. Handle incoming JSON command from assistant UI
+            if "text" in message and message["text"]:
+                raw_text = message["text"].strip()
+                try:
+                    payload = json.loads(raw_text)
+                except Exception:
+                    continue
+
+                mtype = payload.get("type", "")
+
+                if mtype == "ping":
+                    await ws.send_text(json.dumps({"type": "pong"}))
+
+                elif mtype == "patient":
+                    new_pid = payload.get("id") or payload.get("patient_id")
+                    if new_pid:
+                        client_patient_id = new_pid
+                        log.info(f"[{client_id}] Switched patient to '{client_patient_id}'")
+                    await ws.send_text(json.dumps({
+                        "type": "patient",
+                        "patient_id": client_patient_id
+                    }))
+
+                elif mtype == "reset":
+                    reset_history(client_patient_id)
+                    audio_buffer.clear()
+                    log.info(f"[{client_id}] Reset conversational memory for '{client_patient_id}'")
+
+                elif mtype == "start":
+                    audio_buffer.clear()
+                    await ws.send_text(json.dumps({"type": "status", "state": "listening"}))
+
+                elif mtype == "cancel":
+                    audio_buffer.clear()
+                    await ws.send_text(json.dumps({"type": "status", "state": "idle"}))
+
+                elif mtype == "greet":
+                    req_lang = payload.get("language", "en")
+                    greetings = {
+                        "en": "Hi, I am Baymax, your personal healthcare assistant. How can I help you today?",
+                        "kn": "ನಮಸ್ಕಾರ, ನಾನು ಬೇಮ್ಯಾಕ್ಸ್, ನಿಮ್ಮ ವೈಯಕ್ತಿಕ ಆರೋಗ್ಯ ಸಹಾಯಕ. ನಾನು ನಿಮಗೆ ಇಂದು ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?",
+                        "hi": "नमस्ते, मैं बेमैक्स हूँ, आपका व्यक्तिगत स्वास्थ्य सहायक। आज मैं आपकी क्या मदद कर सकता हूँ?",
+                    }
+                    greeting_text = greetings.get(req_lang, greetings["en"])
+                    await ws.send_text(json.dumps({
+                        "type": "reply",
+                        "text": greeting_text,
+                        "sources": [],
+                        "language": req_lang,
+                        "greeting": True
+                    }))
+                    await _speak_web_baymax(ws, greeting_text, language=req_lang)
+
+                elif mtype == "end":
+                    if len(audio_buffer) < 3200:
+                        audio_buffer.clear()
+                        await ws.send_text(json.dumps({"type": "no_speech"}))
+                        await ws.send_text(json.dumps({"type": "status", "state": "idle"}))
+                        continue
+
+                    await ws.send_text(json.dumps({"type": "status", "state": "transcribing"}))
+                    pcm_data = bytes(audio_buffer)
+                    audio_buffer.clear()
+
+                    try:
+                        tr = await transcribe_async(pcm_data, sample_rate=SAMPLE_RATE)
+                        transcript = str(tr).strip()
+                        detected_lang = getattr(tr, "language", "en")
+                    except Exception as stt_err:
+                        log.error(f"[{client_id}] Web STT error: {stt_err}")
+                        transcript = ""
+                        detected_lang = "en"
+
+                    # Double check script in case STT returned en for Kannada/Hindi
+                    script_lang = detect_text_language(transcript)
+                    if script_lang != "en":
+                        detected_lang = script_lang
+
+                    if not transcript:
+                        await ws.send_text(json.dumps({"type": "no_speech"}))
+                        await ws.send_text(json.dumps({"type": "status", "state": "idle"}))
+                        continue
+
+                    await ws.send_text(json.dumps({"type": "transcript", "text": transcript, "language": detected_lang}))
+                    await ws.send_text(json.dumps({"type": "status", "state": "thinking"}))
+
+                    try:
+                        reply, sources = await generate_response_with_sources(
+                            transcript, language=detected_lang, patient_id=client_patient_id
+                        )
+                    except Exception as llm_err:
+                        log.error(f"[{client_id}] Web LLM error: {llm_err}")
+                        reply = "I am having trouble connecting right now. Please try again."
+                        sources = []
+
+                    await ws.send_text(json.dumps({
+                        "type": "reply",
+                        "text": str(reply),
+                        "sources": sources,
+                        "language": detected_lang,
+                        "greeting": False
+                    }))
+                    await _speak_web_baymax(ws, str(reply), language=detected_lang)
+
+                elif mtype == "text":
+                    query_text = payload.get("text", "").strip()
+                    if not query_text:
+                        continue
+
+                    req_lang = payload.get("language")
+                    detected_lang = req_lang or detect_text_language(query_text)
+
+                    await ws.send_text(json.dumps({"type": "status", "state": "thinking"}))
+                    try:
+                        reply, sources = await generate_response_with_sources(
+                            query_text, language=detected_lang, patient_id=client_patient_id
+                        )
+                    except Exception as llm_err:
+                        log.error(f"[{client_id}] Web LLM error: {llm_err}")
+                        reply = "I am having trouble connecting right now. Please try again."
+                        sources = []
+
+                    await ws.send_text(json.dumps({
+                        "type": "reply",
+                        "text": str(reply),
+                        "sources": sources,
+                        "language": detected_lang,
+                        "greeting": False
+                    }))
+                    await _speak_web_baymax(ws, str(reply), language=detected_lang)
+
+    except WebSocketDisconnect:
+        log.info(f"[{client_id}] Web Assistant disconnected")
+    except Exception as e:
+        log.error(f"[{client_id}] Web Assistant WebSocket error: {e}")
+    finally:
+        active_connections.pop(client_id, None)
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+
+# ── Dashboard Controller WebSocket Endpoint (/ws/control) ────────────────────
+@app.websocket("/ws/control")
+async def control_ws(ws: WebSocket):
+    """
+    WebSocket endpoint for HealthBot Dashboard Controller (index.html).
+    Simulates live telemetry (heart rate, SpO2, finger presence, battery) and responds
+    to motor navigation commands and voice/chat queries for hardware-in-the-loop and web testing.
+    """
+    await ws.accept()
+    client_id = f"dashboard_{ws.client.host}:{ws.client.port}"
+    active_connections[client_id] = ws
+    log.info(f"[{client_id}] Dashboard Controller connected")
+
+    audio_state = 0
+    t_step = 0.0
+
+    async def telemetry_broadcaster():
+        nonlocal t_step
+        try:
+            while True:
+                await asyncio.sleep(1.0)
+                t_step += 0.25
+                sim_hr = round(74.0 + 5.0 * math.sin(t_step), 1)
+                sim_spo2 = round(98.2 + 0.6 * math.cos(t_step * 0.8), 1)
+                telemetry = {
+                    "finger": True,
+                    "hr": sim_hr,
+                    "spo2": sim_spo2,
+                    "audio": audio_state,
+                }
+                await ws.send_text(json.dumps(telemetry))
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+
+    telemetry_task = asyncio.create_task(telemetry_broadcaster())
+
+    try:
+        while True:
+            message = await ws.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+
+            if "text" in message and message["text"]:
+                raw_text = message["text"].strip()
+                if raw_text == "ping":
+                    await ws.send_text(json.dumps({"pong": True}))
+                    continue
+
+                try:
+                    data = json.loads(raw_text)
+                except Exception:
+                    continue
+
+                if "dir" in data:
+                    direction = data.get("dir", "S")
+                    speed = data.get("speed", 170)
+                    log.info(f"[{client_id}] Simulated Motor drive: dir={direction}, speed={speed}")
+                    await ws.send_text(json.dumps({
+                        "status": "ack",
+                        "motor": {"dir": direction, "speed": speed}
+                    }))
+
+                elif "voice" in data:
+                    v_on = bool(data.get("voice"))
+                    audio_state = 1 if v_on else 0
+                    log.info(f"[{client_id}] Dashboard voice toggle: {v_on}")
+                    await ws.send_text(json.dumps({"audio": audio_state}))
+
+                elif "query" in data:
+                    q = data.get("query", "").strip()
+                    if q:
+                        audio_state = 2
+                        await ws.send_text(json.dumps({"audio": 2}))
+                        reply = await generate_response(q, language="en", patient_id=DEFAULT_PATIENT_ID)
+                        await ws.send_text(json.dumps({"transcript": str(reply)}))
+                        audio_state = 0
+                        await ws.send_text(json.dumps({"audio": 0}))
+
+    except WebSocketDisconnect:
+        log.info(f"[{client_id}] Dashboard Controller disconnected")
+    except Exception as e:
+        log.error(f"[{client_id}] Dashboard WebSocket error: {e}")
+    finally:
+        telemetry_task.cancel()
+        active_connections.pop(client_id, None)
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+
 # ── Standalone Audio Endpoints (STT / TTS) ───────────────────────────────────
 @app.post("/api/stt")
 async def api_stt(
@@ -334,16 +749,7 @@ async def api_tts(
     language: str = Form(default="hi-IN")
 ):
     """Convert text to speech using Sarvam AI (with Edge-TTS fallback). Returns WAV audio."""
-    wav_bytes = await synthesize_sarvam_audio(text, language=language)
-    if not wav_bytes:
-        # Fallback to Edge-TTS PCM converted to WAV
-        chunks = []
-        async for c in synthesize_chunks(text, language=language):
-            chunks.append(c)
-        if chunks:
-            pcm_all = b"".join(chunks)
-            wav_bytes = pcm_to_wav_bytes(pcm_all, sample_rate=SAMPLE_RATE)
-
+    wav_bytes = await _synthesize_to_wav(text, language=language)
     if wav_bytes:
         return Response(
             content=wav_bytes,
@@ -506,7 +912,7 @@ async def health():
             "stt": "Sarvam AI (saarika:v2) [fallback: faster-whisper]" if sarvam_stt_on else f"faster-whisper ({stt_model_size})",
             "llm": f"Google Gemini ({llm_model})",
             "rag": f"BM25 Retrieval ({patient_count} patients)",
-            "tts": "Sarvam AI (bulbul:v1/v2 custom voice) [fallback: Edge-TTS]" if sarvam_tts_on else f"Edge-TTS ({DEFAULT_VOICE})",
+            "tts": f"Edge-TTS Baymax ({baymax_tts.VOICE}, rate={baymax_tts.RATE}, pitch={baymax_tts.PITCH})",
         },
         "hybrid_config": {
             "sarvam_tts_active": sarvam_tts_on,
@@ -515,9 +921,9 @@ async def health():
             "whisper_stt_fallback": True,
         },
         "tts_config": {
-            "default_voice": DEFAULT_VOICE,
-            "rate": DEFAULT_RATE,
-            "pitch": DEFAULT_PITCH,
+            "default_voice": baymax_tts.VOICE,
+            "rate": baymax_tts.RATE,
+            "pitch": baymax_tts.PITCH,
             "sample_rate": SAMPLE_RATE,
             "chunk_bytes": CHUNK_BYTES,
         },
@@ -529,3 +935,12 @@ async def health():
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
 if os.path.exists(frontend_dir):
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", "8765"))
+    host = os.getenv("HOST", "0.0.0.0")
+    log.info(f"Starting server on {host}:{port}")
+    uvicorn.run("backend.server:app", host=host, port=port, reload=False)
+
