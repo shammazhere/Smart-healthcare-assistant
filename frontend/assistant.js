@@ -1,36 +1,101 @@
 /**
- * HealthBot Assistant — voice + chat page
+ * Baymax Assistant — Voice + Chat Clinical System
  * Talks to the AI gateway (server.py) over WebSocket /ws/web:
- *   mic audio (16 kHz PCM) or typed text  ->  records search + Groq  ->  text reply + spoken MP3
+ *   mic audio (16 kHz PCM) or typed text -> SQLite RAG records + Gemini -> text reply + spoken audio
+ * Progressive Web App (PWA) enabled with offline shell caching & install prompts.
  */
 (() => {
   'use strict';
 
   const $ = (id) => document.getElementById(id);
   const el = {
-    pill: $('wsPill'), pillText: $('wsStatusText'), select: $('patientSelect'),
-    engineInfo: $('engineInfo'), statePill: $('audioStatePill'), stateText: $('audioStateText'),
-    chat: $('chatScroll'), suggestions: $('suggestions'), mic: $('micBtn'), micHint: $('micHint'),
-    input: $('textInput'), send: $('sendBtn'), patient: $('patientCard'), sources: $('sourcesList'),
-    convBtn: $('convBtn'), newChat: $('newChatBtn'),
+    pill: $('wsPill'),
+    pillText: $('wsStatusText'),
+    select: $('patientSelect'),
+    engineInfo: $('engineInfo'),
+    statePill: $('audioStatePill'),
+    stateText: $('audioStateText'),
+    chat: $('chatScroll'),
+    suggestions: $('suggestions'),
+    mic: $('micBtn'),
+    micHint: $('micHint'),
+    soundbars: $('audioSoundbars'),
+    input: $('textInput'),
+    send: $('sendBtn'),
+    patient: $('patientCard'),
+    sources: $('sourcesList'),
+    convBtn: $('convBtn'),
+    newChat: $('newChatBtn'),
+    installBtn: $('pwaInstallBtn'),
   };
 
   const TARGET_RATE = 16000;
   const NO_SPEECH_MSG = "I didn't hear anything. Tap the microphone and try again.";
   const STATE_LABELS = {
-    idle: 'Idle', listening: 'Listening…', transcribing: 'Understanding…',
-    thinking: 'Checking records…', speaking: 'Speaking…',
+    idle: 'Ready',
+    listening: 'Listening…',
+    transcribing: 'Processing speech…',
+    thinking: 'Reviewing records…',
+    speaking: 'Speaking…',
   };
   const SECTION_LABELS = {
-    profile: 'Profile', allergies: 'Allergy', conditions: 'Condition', surgeries: 'Surgery',
-    medications: 'Medicine', lab_results: 'Lab result', vitals_baseline: 'Usual vitals',
-    visits: 'Doctor visit', appointments: 'Appointment', care_instructions: 'Care instruction',
-    doctor_notes: "Doctor's note",
+    profile: 'Profile',
+    allergies: 'Allergy Record',
+    conditions: 'Diagnosis',
+    surgeries: 'Surgical History',
+    medications: 'Medication',
+    lab_results: 'Lab Vitals',
+    vitals_baseline: 'Usual Baseline',
+    visits: 'Clinical Visit',
+    appointments: 'Appointment',
+    care_instructions: 'Care Protocol',
+    doctor_notes: 'Physician Note',
   };
 
-  const state = { ws: null, connected: false, patientId: null, ui: 'idle', recording: false, starting: false, convMode: false, silent: 0 };
+  const state = {
+    ws: null,
+    connected: false,
+    patientId: null,
+    ui: 'idle',
+    recording: false,
+    starting: false,
+    convMode: false,
+    silent: 0,
+  };
 
-  // ── tiny DOM helper ────────────────────────────────────────────────────────
+  // ── PWA Service Worker & Install Prompt ────────────────────────────────────
+  let deferredInstallPrompt = null;
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').then((reg) => {
+        console.log('[PWA] Service Worker registered with scope:', reg.scope);
+      }).catch((err) => {
+        console.warn('[PWA] Service Worker registration failed:', err);
+      });
+    });
+  }
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (el.installBtn) {
+      el.installBtn.style.display = 'inline-flex';
+    }
+  });
+
+  if (el.installBtn) {
+    el.installBtn.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+      if (choice.outcome === 'accepted') {
+        el.installBtn.style.display = 'none';
+      }
+      deferredInstallPrompt = null;
+    });
+  }
+
+  // ── Tiny DOM helper ────────────────────────────────────────────────────────
   function h(tag, cls, text) {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -41,25 +106,25 @@
   // ── UI state ───────────────────────────────────────────────────────────────
   function setState(s) {
     state.ui = s;
-    el.stateText.textContent = STATE_LABELS[s] || s;
+    if (el.stateText) el.stateText.textContent = STATE_LABELS[s] || s;
     const cls = s === 'transcribing' ? 'thinking' : s;
-    el.statePill.className = 'audio-state-pill' + (cls !== 'idle' ? ' ' + cls : '');
-    el.mic.classList.toggle('active', state.recording);
+    if (el.statePill) el.statePill.className = 'audio-state-pill' + (cls !== 'idle' ? ' ' + cls : '');
+    if (el.mic) el.mic.classList.toggle('active', state.recording);
+    if (el.soundbars) el.soundbars.classList.toggle('active', state.recording);
   }
 
   function setConnection(kind, label) {
-    el.pill.className = 'status-pill ' + kind;
-    el.pillText.textContent = label;
+    if (el.pill) el.pill.className = 'status-pill ' + kind;
+    if (el.pillText) el.pillText.textContent = label;
   }
 
-  // Scrolls only the chat box (never the whole page)
   function scrollChat() {
-    el.chat.scrollTop = el.chat.scrollHeight;
+    if (el.chat) el.chat.scrollTop = el.chat.scrollHeight;
   }
 
   function addMessage(kind, text, pending) {
     const msg = h('div', 'dialogue-msg ' + kind + (pending ? ' pending' : ''));
-    const who = kind === 'user' ? 'You' : kind === 'robot' ? 'Baymax' : 'System';
+    const who = kind === 'user' ? 'Patient' : kind === 'robot' ? 'Baymax · Care Intelligence' : 'System';
     const content = h('div', 'msg-content', text);
     msg.append(h('div', 'msg-author', who), content);
     el.chat.append(msg);
@@ -92,70 +157,120 @@
     }
   }
 
-  // Replaces the list every time and skips repeated records
+  // ── Clinical Sources (Audit Trail) ─────────────────────────────────────────
   function renderSources(sources) {
     el.sources.replaceChildren();
     if (!sources || !sources.length) {
-      el.sources.append(h('p', 'muted', 'No specific records were needed for that answer.'));
+      el.sources.append(h('p', 'muted', 'Ask a question or describe symptoms to view cited health records.'));
       return;
     }
     const seen = new Set();
+    let idx = 1;
     sources.forEach((s) => {
       const key = (s.text || '').replace(/\s+/g, ' ').trim().toLowerCase();
       if (seen.has(key)) return;
       seen.add(key);
       const item = h('div', 'source-item');
-      item.append(h('span', 'chip chip-info', sectionLabel(s.section)), h('p', '', s.text));
+      const top = h('div', 'source-top');
+      top.append(
+        h('span', 'source-index', '[' + idx++ + ']'),
+        h('span', 'chip chip-source', sectionLabel(s.section))
+      );
+      item.append(top, h('p', 'source-text', s.text));
       el.sources.append(item);
     });
   }
 
-  // ── Patient card ───────────────────────────────────────────────────────────
+  // ── Executive Patient Summary Card ─────────────────────────────────────────
   function block(title, node) {
     const b = h('div', 'pt-block');
     b.append(h('h3', '', title), node);
     return b;
   }
 
-  function chips(items, cls) {
-    const wrap = h('div', 'chips');
-    if (!items.length) wrap.append(h('span', 'muted', 'None recorded'));
-    items.forEach((t) => wrap.append(h('span', 'chip ' + (cls || ''), t)));
-    return wrap;
-  }
-
   function renderOverview(p) {
     const frag = document.createDocumentFragment();
-    const meta = [p.age ? p.age + ' years' : '', p.sex, p.blood_group ? 'Blood group ' + p.blood_group : '']
-      .filter(Boolean).join(', ');
-    frag.append(h('div', 'pt-name', p.name || p.id), h('div', 'pt-meta', meta));
-    if (p.primary_doctor) frag.append(h('div', 'pt-meta', 'Doctor: ' + p.primary_doctor));
 
-    frag.append(block('Allergies', chips(
-      (p.allergies || []).map((a) => (a.severity ? a.substance + ' (' + a.severity + ')' : a.substance)), 'chip-warn')));
-    frag.append(block('Conditions', chips(p.conditions || [], '')));
+    // 1. Patient Monogram + Header Info
+    const initials = (p.name || 'PT').split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+    const headRow = h('div', 'pt-profile-header');
+    const avatar = h('div', 'pt-avatar', initials);
+    const info = h('div', 'pt-avatar-info');
+    info.append(
+      h('div', 'pt-name', p.name || p.id),
+      h('div', 'pt-physician', p.primary_doctor ? 'Primary: ' + p.primary_doctor : 'Physician unassigned')
+    );
+    headRow.append(avatar, info);
+    frag.append(headRow);
 
-    const ul = h('ul');
-    (p.medications || []).forEach((m) => {
-      const li = h('li', '', m.name + (m.dose ? ' ' + m.dose : ''));
-      li.append(h('span', '', m.frequency || ''));
-      ul.append(li);
+    // 2. Clinical Vitals & Demographics 3-Card Grid
+    const vitalsGrid = h('div', 'pt-vitals-grid');
+    const ageTile = h('div', 'vitals-tile');
+    ageTile.append(h('span', 'tile-label', 'Age'), h('span', 'tile-val', p.age ? p.age + ' yrs' : 'N/A'));
+    const sexTile = h('div', 'vitals-tile');
+    sexTile.append(h('span', 'tile-label', 'Sex'), h('span', 'tile-val', p.sex || 'N/A'));
+    const bloodTile = h('div', 'vitals-tile blood-tile');
+    bloodTile.append(h('span', 'tile-label', 'Blood Type'), h('span', 'tile-val blood-val', p.blood_group || 'N/A'));
+    vitalsGrid.append(ageTile, sexTile, bloodTile);
+    frag.append(vitalsGrid);
+
+    // 3. Allergies & Contraindications
+    const allergyList = (p.allergies || []).map((a) => {
+      const tag = h('span', 'chip chip-warn');
+      tag.append(h('strong', '', a.substance || a));
+      if (a.severity) tag.append(h('span', 'chip-sub', ' (' + a.severity + ')'));
+      return tag;
     });
-    if (!ul.children.length) ul.append(h('li', 'muted', 'None recorded'));
-    frag.append(block('Medicines', ul));
+    const allergyWrap = h('div', 'chips');
+    if (!allergyList.length) allergyWrap.append(h('span', 'muted', 'No known drug allergies'));
+    else allergyList.forEach((t) => allergyWrap.append(t));
+    frag.append(block('Allergies & Contraindications', allergyWrap));
 
+    // 4. Diagnosed Conditions
+    const condWrap = h('div', 'chips');
+    if (!(p.conditions || []).length) condWrap.append(h('span', 'muted', 'No chronic conditions listed'));
+    else (p.conditions || []).forEach((c) => condWrap.append(h('span', 'chip chip-neutral', c)));
+    frag.append(block('Diagnosed Conditions', condWrap));
+
+    // 5. Active Prescription Regimen
+    const medList = h('div', 'pt-med-list');
+    (p.medications || []).forEach((m) => {
+      const item = h('div', 'pt-med-item');
+      const medTop = h('div', 'med-top');
+      medTop.append(h('span', 'med-name', m.name));
+      if (m.dose) medTop.append(h('span', 'med-dose', m.dose));
+      item.append(medTop);
+      if (m.frequency) item.append(h('div', 'med-freq', m.frequency));
+      medList.append(item);
+    });
+    if (!medList.children.length) medList.append(h('div', 'muted', 'No active medications'));
+    frag.append(block('Active Prescriptions', medList));
+
+    // 6. Next Clinical Appointment
     const appt = p.next_appointment;
-    const apptNode = h('div');
     if (appt) {
-      const li = h('li', '', (appt.date || '') + (appt.time ? ' at ' + appt.time : '') + (appt.doctor ? ' — ' + appt.doctor : ''));
-      li.append(h('span', '', appt.reason || ''));
-      const list = h('ul');
-      list.append(li);
-      apptNode.append(list);
-    } else {
-      apptNode.append(h('span', 'muted', 'No upcoming appointment'));
+      const apptCard = h('div', 'pt-appt-card');
+      const apptDate = h('div', 'appt-badge', appt.date || 'Scheduled');
+      const apptDetails = h('div', 'appt-details');
+      apptDetails.append(
+        h('div', 'appt-doctor', appt.doctor || 'Clinic Visit'),
+        h('div', 'appt-meta', [appt.time, appt.reason, appt.location].filter(Boolean).join(' · '))
+      );
+      apptCard.append(apptDate, apptDetails);
+      frag.append(block('Upcoming Appointment', apptCard));
     }
-    frag.append(block('Next appointment', apptNode));
+
+    // 7. Emergency Contact
+    if (p.emergency_contact && p.emergency_contact.name) {
+      const ec = p.emergency_contact;
+      const ecRow = h('div', 'pt-ec-row');
+      ecRow.append(
+        h('span', 'ec-label', 'Emergency Contact: '),
+        h('span', 'ec-val', ec.name + ' (' + (ec.relation || 'Contact') + ') ' + (ec.phone || ''))
+      );
+      frag.append(ecRow);
+    }
+
     el.patient.replaceChildren(frag);
   }
 
@@ -248,7 +363,7 @@
       case 'patient':
         state.patientId = msg.patient_id;
         loadOverview(msg.patient_id);
-        addSystem('Switched patient.');
+        addSystem('Switched active record.');
         renderSources([]);
         break;
       case 'status':
@@ -345,7 +460,7 @@
   function maybeFinishSpeaking() {
     if (serverDone && activeSources.size === 0 && state.ui === 'speaking') {
       setState('idle');
-      if (state.convMode) setTimeout(autoListen, 450);   // conversation mode: listen again
+      if (state.convMode) setTimeout(autoListen, 450);
     }
   }
 
@@ -370,8 +485,6 @@
   let micStream = null, micSource = null, workletNode = null, muteGain = null, workletReady = false;
   let rec = null;
 
-  // <downsampler>
-  // Box-filter downsampler: Float32 at any rate -> Int16 at TARGET_RATE (keeps state between chunks).
   function makeDownsampler(inRate, outRate) {
     const ratio = inRate / outRate;
     let acc = 0, cnt = 0, seen = 0, boundary = ratio;
@@ -396,21 +509,20 @@
       return pcm;
     };
   }
-  // </downsampler>
 
   function micErrorMessage(e) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      return 'The microphone needs a secure page. Open this page as http://localhost:8765 on the same computer (or use HTTPS).';
+      return 'Microphone requires HTTPS or localhost. Open this page securely.';
     }
     if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
-      return 'Microphone access was blocked. Click the lock icon in the address bar, allow the microphone, and try again.';
+      return 'Microphone permission blocked. Please allow microphone access in your browser settings.';
     }
-    if (e && e.name === 'NotFoundError') return 'No microphone was found on this device.';
-    return 'Could not start the microphone: ' + ((e && e.message) || e);
+    if (e && e.name === 'NotFoundError') return 'No microphone hardware found on this device.';
+    return 'Microphone error: ' + ((e && e.message) || e);
   }
 
   async function startRecording() {
-    if (state.recording || state.starting) return;      // ignore double taps while starting
+    if (state.recording || state.starting) return;
     if (!state.connected) { addSystem('Not connected to the server yet — please wait a moment.'); return; }
     state.starting = true;
     try {
@@ -439,7 +551,7 @@
     micSource = audioCtx.createMediaStreamSource(micStream);
     workletNode = new AudioWorkletNode(audioCtx, 'pcm-capture');
     muteGain = audioCtx.createGain();
-    muteGain.gain.value = 0;                       // keeps the graph running without echoing the mic
+    muteGain.gain.value = 0;
     micSource.connect(workletNode);
     workletNode.connect(muteGain);
     muteGain.connect(audioCtx.destination);
@@ -456,21 +568,26 @@
     let sum = 0;
     for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
     const rms = Math.sqrt(sum / f32.length);
-    el.mic.style.setProperty('--level', Math.min(1, rms * 8).toFixed(2));
+    const lvl = Math.min(1, rms * 8).toFixed(2);
+    el.mic.style.setProperty('--level', lvl);
+    if (el.soundbars) {
+      el.soundbars.classList.add('active');
+      el.soundbars.style.setProperty('--level', lvl);
+    }
 
     const pcm = rec.down(f32);
     if (pcm.length && state.ws && state.ws.readyState === WebSocket.OPEN) state.ws.send(pcm.buffer);
 
     const now = performance.now();
-    if (rec.noise.length < 6) {                     // learn the room's background level
+    if (rec.noise.length < 6) {
       rec.noise.push(rms);
       if (rec.noise.length === 6) rec.threshold = Math.min(0.05, Math.max(0.012, Math.min(...rec.noise) * 3));
     }
     if (rms > rec.threshold) { rec.speech = true; rec.lastSpeech = now; }
 
-    if (rec.speech && now - rec.lastSpeech > 750) stopRecording(true);         // finished talking
-    else if (!rec.speech && now - rec.startedAt > 8000) stopRecording(false);   // nobody spoke
-    else if (now - rec.startedAt > 30000) stopRecording(true);                  // safety limit
+    if (rec.speech && now - rec.lastSpeech > 750) stopRecording(true);
+    else if (!rec.speech && now - rec.startedAt > 8000) stopRecording(false);
+    else if (now - rec.startedAt > 30000) stopRecording(true);
   }
 
   function stopRecording(sendEnd, silent) {
@@ -486,6 +603,10 @@
     micStream = micSource = workletNode = muteGain = null;
     rec = null;
     el.mic.style.removeProperty('--level');
+    if (el.soundbars) {
+      el.soundbars.classList.remove('active');
+      el.soundbars.style.removeProperty('--level');
+    }
     el.micHint.textContent = 'Tap microphone to speak, or type below. Auto-detects speech.';
     if (silent) { setState('idle'); return; }
 
@@ -507,7 +628,7 @@
     if (!text) return;
     if (!state.connected) { addSystem('Not connected to the server yet — please wait a moment.'); return; }
     if (state.recording) stopRecording(false, true);
-    try { await ensureAudio(); } catch (e) { /* playback may be blocked; text still works */ }
+    try { await ensureAudio(); } catch (e) { /* audio playback may be blocked */ }
     stopPlayback();
     addMessage('user', text);
     el.input.value = '';
@@ -523,7 +644,10 @@
   el.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendText(); });
   el.suggestions.addEventListener('click', (e) => {
     const b = e.target.closest('.chip-btn');
-    if (b) sendText(b.textContent);
+    if (b) {
+      const q = b.getAttribute('data-query') || b.querySelector('.chip-label')?.textContent || b.textContent;
+      sendText(q);
+    }
   });
   el.select.addEventListener('change', () => {
     if (state.recording) stopRecording(false, true);
@@ -531,14 +655,13 @@
     send({ type: 'patient', id: el.select.value });
   });
 
-  // ── Start ──────────────────────────────────────────────────────────────────
   // ── Conversation mode: hands-free back-and-forth ───────────────────────────
   function noteSilence() {
     if (!state.convMode) return;
     state.silent += 1;
     if (state.silent >= 2) {
       setConvMode(false, true);
-      addSystem("I'll wait here. Turn on conversation mode or tap the microphone when you want to talk.");
+      addSystem("Standing by. Turn on continuous listening or tap the microphone when ready.");
     } else {
       setTimeout(autoListen, 300);
     }
@@ -588,7 +711,7 @@
   el.convBtn.addEventListener('click', () => setConvMode(!state.convMode));
   el.newChat.addEventListener('click', newConversation);
 
-  addSystem('Hello! Tap the microphone or type to talk. Turn on conversation mode for a hands-free chat.');
+  addSystem('Session ready. Tap the microphone or type below. Turn on continuous listening for hands-free triage.');
   setState('idle');
   connect();
 })();

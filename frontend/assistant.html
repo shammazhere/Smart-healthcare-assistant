@@ -2,11 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Baymax Assistant — Voice &amp; Chat</title>
+  
+  <!-- Progressive Web App (PWA) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Baymax">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+  <!-- Fonts & Stylesheets -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="assistant.css">
   <link rel="stylesheet" href="light.css">
@@ -17,18 +30,29 @@
   <div class="app-container">
     <header class="navbar">
       <div class="brand">
+        <div class="brand-emblem">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 4v16m-8-8h16"/>
+          </svg>
+        </div>
         <div class="brand-text">
-          <h1>Baymax <span class="badge-version">Clinical Assistant</span></h1>
+          <div class="brand-row">
+            <h1>Baymax</h1>
+            <span class="badge-version">Clinical OS</span>
+          </div>
           <p class="subtitle">Voice &amp; text triage grounded in patient records</p>
         </div>
       </div>
 
       <div class="patient-picker">
-        <label for="patientSelect">Patient</label>
+        <span class="picker-label">Active Record</span>
         <select id="patientSelect" aria-label="Choose patient"></select>
       </div>
 
       <div class="system-status-pills">
+        <button id="pwaInstallBtn" type="button" class="status-pill install-pill" style="display: none;">
+          Install App
+        </button>
         <div class="status-pill" id="wsPill">
           <span class="indicator-dot"></span>
           <span class="pill-text" id="wsStatusText">Connecting…</span>
@@ -39,12 +63,12 @@
 
     <main class="assistant-grid">
 
-      <!-- Chat + voice -->
+      <!-- Chat + voice dialogue section -->
       <section class="glass-card chat-card">
         <div class="card-header">
           <div class="card-title">
             <div>
-              <h2>Dialogue</h2>
+              <h2>Clinical Dialogue</h2>
               <p id="engineInfo">Speech recognition, clinical triage, voice response</p>
             </div>
           </div>
@@ -61,16 +85,33 @@
 
         <div class="chat-scroll" id="chatScroll" aria-live="polite"></div>
 
+        <!-- Guided Clinical Query Prompts -->
         <div class="suggestions" id="suggestions">
-          <button type="button" class="chip-btn">What medicines do I take today?</button>
-          <button type="button" class="chip-btn">When is my next appointment?</button>
-          <button type="button" class="chip-btn">Am I allergic to anything?</button>
-          <button type="button" class="chip-btn">How was my last sugar report?</button>
-          <button type="button" class="chip-btn">Can I take ibuprofen for my knee pain?</button>
+          <button type="button" class="chip-btn" data-query="What medicines do I take today?">
+            <span class="chip-cat">Prescription</span>
+            <span class="chip-label">What medicines do I take today?</span>
+          </button>
+          <button type="button" class="chip-btn" data-query="When is my next appointment?">
+            <span class="chip-cat">Schedule</span>
+            <span class="chip-label">When is my next appointment?</span>
+          </button>
+          <button type="button" class="chip-btn" data-query="Am I allergic to anything?">
+            <span class="chip-cat">Allergies</span>
+            <span class="chip-label">Am I allergic to anything?</span>
+          </button>
+          <button type="button" class="chip-btn" data-query="How was my last sugar report?">
+            <span class="chip-cat">Lab Vitals</span>
+            <span class="chip-label">How was my last sugar report?</span>
+          </button>
+          <button type="button" class="chip-btn" data-query="Can I take ibuprofen for my knee pain?">
+            <span class="chip-cat">Safety</span>
+            <span class="chip-label">Can I take ibuprofen for knee pain?</span>
+          </button>
         </div>
 
+        <!-- Composer & Microphone -->
         <div class="composer">
-          <button class="voice-mic-btn mic-small" id="micBtn" type="button" aria-label="Talk to Baymax">
+          <button class="voice-mic-btn" id="micBtn" type="button" aria-label="Talk to Baymax">
             <div class="mic-inner-circle">
               <svg class="mic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -78,15 +119,27 @@
               </svg>
             </div>
           </button>
-          <input type="text" id="textInput" placeholder="Speak or type a symptom / question…" autocomplete="off" maxlength="500">
+          <input type="text" id="textInput" placeholder="Describe symptoms or ask about patient records…" autocomplete="off" maxlength="500">
           <button class="btn-send" id="sendBtn" type="button">Send</button>
         </div>
-        <div class="mic-hint" id="micHint">Tap microphone to speak, or type below. Auto-detects speech.</div>
+
+        <!-- Dynamic Live Audio Soundbars & Hint -->
+        <div class="mic-status-row">
+          <div class="audio-soundbars" id="audioSoundbars" aria-hidden="true">
+            <span class="bar b1"></span>
+            <span class="bar b2"></span>
+            <span class="bar b3"></span>
+            <span class="bar b4"></span>
+            <span class="bar b5"></span>
+          </div>
+          <div class="mic-hint" id="micHint">Tap microphone to speak, or type above. Auto-detects speech.</div>
+        </div>
       </section>
 
       <!-- Side panels -->
       <aside class="side-col">
-        <article class="glass-card">
+        <!-- Patient Summary Card -->
+        <article class="glass-card patient-section">
           <div class="card-header">
             <div class="card-title">
               <div>
@@ -95,10 +148,11 @@
               </div>
             </div>
           </div>
-          <div id="patientCard" class="patient-card"><p class="muted">Loading…</p></div>
+          <div id="patientCard" class="patient-card"><p class="muted">Loading patient data…</p></div>
         </article>
 
-        <article class="glass-card">
+        <!-- Clinical Sources Card -->
+        <article class="glass-card sources-section">
           <div class="card-header">
             <div class="card-title">
               <div>

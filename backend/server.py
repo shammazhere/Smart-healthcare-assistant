@@ -939,6 +939,24 @@ if os.path.exists(frontend_dir):
     async def serve_root():
         return FileResponse(os.path.join(frontend_dir, "assistant.html"))
 
+    @app.get("/manifest.json", include_in_schema=False)
+    async def serve_manifest():
+        return FileResponse(
+            os.path.join(frontend_dir, "manifest.json"),
+            media_type="application/manifest+json"
+        )
+
+    @app.get("/sw.js", include_in_schema=False)
+    async def serve_sw():
+        return FileResponse(
+            os.path.join(frontend_dir, "sw.js"),
+            media_type="application/javascript",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Service-Worker-Allowed": "/"
+            }
+        )
+
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 
