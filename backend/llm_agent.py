@@ -150,11 +150,10 @@ You are Baymax, a friendly, empathetic personal healthcare assistant robot desig
 
 Persona & Clinical Safety Rules:
 - Identity: You are Baymax, a personal healthcare assistant. You speak warmly, simply, gently, and reassuringly.
-- Length: Keep every spoken response concise, helpful, and strictly under 40 words.
 - Tone: Speak in a comforting, friendly manner. Do not output internal thought notes, reasoning text, or markdown formatting.
-- Clinical Boundary: Provide general wellness information and support grounded in the patient's records; NEVER diagnose, prescribe medication, or give specific medical treatment.
-- Safety: Remind the patient you are an assistant robot, not a physician, ONLY when giving final predicted advice/conclusion. NEVER state or repeat this disclaimer while asking clarifying questions.
-- Emergency: For severe symptoms or medical emergencies, immediately direct the patient to call emergency services or press their call button.
+- Clinical Protocol: For symptoms and health complaints, immediately provide a structured, helpful assessment: state the probable problem and likely causes, recommend safe temporary relief methods, warn about serious red-flag symptoms, and advise visiting a doctor urgently if serious signs appear.
+- Safety: Remind the patient you are an assistant robot, not a physician, at the conclusion of your advice.
+- Emergency: For acute life-threatening emergencies (e.g. severe chest pressure, severe shortness of breath, sudden facial drooping/speech loss), immediately direct the patient to call emergency services.
 """.strip()
 
 # ── Default Client Settings ───────────────────────────────────────────────────
@@ -413,24 +412,19 @@ async def generate_response_with_sources(
     is_first_turn = (len(_history[pid]) == 0)
 
     system_instruction += (
-        f"BAYMAX CLINICAL TRIAGE & SYMPTOM ASSESSMENT PROTOCOL:\n"
+        f"BAYMAX CLINICAL ASSESSMENT & TRIAGE PROTOCOL:\n"
         f"1. Health Record Questions (e.g. medications, appointment dates, allergies, doctor notes):\n"
         f"   - Answer directly, helpfully, and concisely using the patient's records above.\n\n"
         f"2. Patient Symptom Complaints & Health Concerns (e.g. pain, headache, stomach ache, fever, dizziness, nausea):\n"
-        f"   - Do NOT provide an immediate one-shot diagnosis.\n"
-        f"   - Interactive Triage Phase: Ask 2 to 4 clarifying diagnostic questions back (ONE concise question per turn) to pinpoint the exact cause:\n"
-        f"     * Question 1: Severity on a scale of 1 to 10 or exact location of the discomfort.\n"
-        f"     * Question 2: Onset, duration, and lifestyle factors (e.g. hydration, food intake, sleep hours, stress).\n"
-        f"     * Question 3: Associated symptoms (e.g. fever, nausea, vomiting, dizziness, light sensitivity).\n"
-        f"     * CRITICAL RULE FOR QUESTIONS: While asking clarifying questions, do NOT include ANY physician disclaimer. Do NOT say 'I am just a healthcare assistant, not a physician'. Simply ask the question warmly and concisely.\n"
-        f"   - Pinpoint & Conclusion Phase (ONLY after asking the clarifying questions across turns, or once sufficient details are provided):\n"
-        f"     * Synthesize their answers and explain the pinpointed possible cause/reason clearly (e.g., tension headache from dehydration and lack of sleep, gastric irritation from oily food, muscle fatigue).\n"
-        f"     * Offer gentle comfort self-care advice.\n"
-        f"     * ONLY in this final conclusion/advice turn, conclude your response with this exact disclaimer: \"{disclaimer_text}\"\n\n"
+        f"   - Deliver a clear, reassuring, and structured 3-part clinical response:\n"
+        f"     * PART 1 (Probable Problem & Likely Cause): State what the probable problem is and explain what is likely causing it in plain, simple terms. Relate to their health history, daily factors (sleep, dehydration, stress, screen time), or existing conditions (like hypertension or diabetes) when relevant.\n"
+        f"     * PART 2 (Safe Temporary Relief Methods): Suggest safe, practical, non-medicinal comfort measures to temporarily relieve the symptoms (e.g., resting in a quiet dim room, applying a cool or warm compress, gentle neck stretching, sipping water, relaxation). Strictly avoid suggesting medications that conflict with their recorded allergies or chronic conditions.\n"
+        f"     * PART 3 (Serious Warning Signs & Urgent Doctor Referral): Right after the relief suggestions, state clearly: if the condition is serious, worsening, sudden and severe, or accompanied by red-flag warning signs (e.g. high fever, stiff neck, dizziness, vision blur, numbness, chest pain, or lasting beyond a few hours without relief), advise them to visit a doctor or emergency services urgently.\n"
+        f"     * Concluding Safety Disclaimer: Conclude with this exact disclaimer: \"{disclaimer_text}\"\n\n"
         f"3. Language & Tone Guidelines:\n"
-        f"   - Tone: Caring, empathetic, gentle, reassuring.\n"
+        f"   - Tone: Caring, empathetic, gentle, reassuring, and medically responsible.\n"
         f"   - Language: Respond 100% in natural, fluent {target_lang_name}. Do NOT output ANY English words if language is not English.\n"
-        f"   - Length: When asking a triage question, keep it concise under 35 words. In the final conclusion phase, keep it under 65 words.\n"
+        f"   - Length: Between 60 to 95 words — concise enough for voice audio playback while delivering the cause, relief steps, and urgent doctor guidance clearly.\n"
     )
 
     if is_first_turn:
@@ -519,24 +513,13 @@ async def generate_response_with_sources(
             else:
                 reply = re.sub(r"^(Hello|Hi|Hey)?[!,\s]*(I\s+am\s+Baymax[,\s]*(your\s+personal\s+healthcare\s+assistant)?[.!?]?)?\s*", "", reply, flags=re.IGNORECASE).strip()
 
-        # Determine if this response is a clarifying question or final conclusion
-        user_turns_count = len([m for m in _history[pid] if m.get("role") == "user"])
+        # Clean disclaimer handling: only append to advice, avoid duplication
         is_question = is_asking_question(reply)
-
         if is_question:
-            # While asking questions, NEVER include the physician disclaimer
             reply = strip_physician_disclaimer(reply)
         else:
-            # Only add disclaimer during the final conclusion/advice phase
-            cause_markers = (
-                "कारण", "ಕಾರಣ", "cause", "reason", "due to", "because of", "ಆಧಾರದ ಮೇಲೆ",
-                "उपाय", "आराम", "ವಿವರಣೆ", "காரணம்", "കാരണം"
-            )
-            is_conclusion = (user_turns_count >= 2) or any(cm in reply for cm in cause_markers)
-            if is_conclusion:
-                # Strip any malformed/duplicate disclaimer first, then cleanly append the canonical localized disclaimer
-                reply = strip_physician_disclaimer(reply)
-                reply = f"{reply}\n\n{disclaimer_text}".strip()
+            reply = strip_physician_disclaimer(reply)
+            reply = f"{reply}\n\n{disclaimer_text}".strip()
 
         # Update per-patient conversation history
         _history[pid].append({"role": "user", "content": user_text.strip()})

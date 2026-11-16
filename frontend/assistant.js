@@ -289,6 +289,8 @@
   let pendingUser = null;
   let retryTimer = null;
   let pingTimer = null;
+  let lastPongTime = Date.now();
+  let reconnectCount = 0;
 
   function send(obj) {
     if (state.ws && state.ws.readyState === WebSocket.OPEN) {
@@ -298,20 +300,57 @@
     return false;
   }
 
+  function scheduleReconnect(delayMs) {
+    clearTimeout(retryTimer);
+    reconnectCount++;
+    const ms = delayMs !== undefined ? delayMs : Math.min(2500, 600 + reconnectCount * 400);
+    retryTimer = setTimeout(connect, ms);
+  }
+
   function connect() {
     clearTimeout(retryTimer);
+    clearInterval(pingTimer);
+    if (state.ws) {
+      try {
+        state.ws.onopen = state.ws.onclose = state.ws.onerror = state.ws.onmessage = null;
+        state.ws.close();
+      } catch (e) {}
+      state.ws = null;
+    }
+
     setConnection('connecting', 'Connecting…');
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(proto + '://' + location.host + '/ws/web');
-    ws.binaryType = 'arraybuffer';
+    const wsUrl = proto + '://' + location.host + '/ws/web';
+
+    let ws;
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
+    } catch (err) {
+      console.warn('[WS] Create error:', err);
+      scheduleReconnect();
+      return;
+    }
     state.ws = ws;
 
     ws.onopen = () => {
       state.connected = true;
+      reconnectCount = 0;
+      lastPongTime = Date.now();
       setConnection('online', 'Connected');
       clearInterval(pingTimer);
-      pingTimer = setInterval(() => send({ type: 'ping' }), 20000);
+      pingTimer = setInterval(() => {
+        if (!state.connected || !state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+        send({ type: 'ping' });
+        // Heartbeat timeout watchdog: if no pong or traffic in 16s, reconnect cleanly
+        if (Date.now() - lastPongTime > 16000) {
+          console.warn('[WS] Heartbeat timeout — reconnecting...');
+          try { ws.close(); } catch (_) {}
+          scheduleReconnect(400);
+        }
+      }, 8000);
     };
+
     ws.onclose = () => {
       state.connected = false;
       clearInterval(pingTimer);
@@ -319,20 +358,54 @@
       stopPlayback();
       setConvMode(false, true);
       setState('idle');
-      setConnection('offline', 'Disconnected — retrying…');
-      retryTimer = setTimeout(connect, 2000);
+      setConnection('offline', 'Reconnecting…');
+      scheduleReconnect();
     };
-    ws.onerror = () => { /* onclose handles the retry */ };
+
+    ws.onerror = () => { /* onclose handles retry */ };
+
     ws.onmessage = (ev) => {
+      lastPongTime = Date.now();
       if (typeof ev.data === 'string') {
         let msg;
         try { msg = JSON.parse(ev.data); } catch (e) { return; }
+        if (msg.type === 'pong') {
+          lastPongTime = Date.now();
+          return;
+        }
         handleServer(msg);
       } else if (pendingAudioMeta) {
         pendingAudioMeta = null;
         queueAudio(ev.data);
       }
     };
+  }
+
+  // Active Mobile Lifecycle Reconnection Handlers
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      if (!state.connected || !state.ws || state.ws.readyState !== WebSocket.OPEN) {
+        console.log('[WS] Screen unlocked / tab visible — reconnecting immediately');
+        connect();
+      } else {
+        send({ type: 'ping' });
+      }
+    }
+  });
+
+  window.addEventListener('online', () => {
+    console.log('[WS] Network back online — reconnecting');
+    connect();
+  });
+
+  if (el.wsPill) {
+    el.wsPill.style.cursor = 'pointer';
+    el.wsPill.title = 'Tap to reconnect';
+    el.wsPill.addEventListener('click', () => {
+      if (!state.connected || !state.ws || state.ws.readyState !== WebSocket.OPEN) {
+        connect();
+      }
+    });
   }
 
   function handleServer(msg) {

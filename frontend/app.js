@@ -77,13 +77,15 @@ function toggleConnection() {
 
 function connectWebSocket() {
   const ip = elements.robotIpInput.value.trim() || window.location.host || 'localhost:8765';
-  const url = `ws://${ip}/ws/control`;
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${ip}/ws/control`;
 
   updateConnectionStatus('connecting', 'Connecting...');
   
   try {
     if (state.ws) {
-      state.ws.close();
+      try { state.ws.close(); } catch (_) {}
+      state.ws = null;
     }
 
     state.ws = new WebSocket(url);
@@ -117,6 +119,19 @@ function connectWebSocket() {
     updateConnectionStatus('offline', 'Failed');
   }
 }
+
+// Mobile Lifecycle Auto-Reconnect
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && (!state.connected || !state.ws || state.ws.readyState !== WebSocket.OPEN)) {
+    console.log('[WS] Tab active — reconnecting to HealthBot...');
+    connectWebSocket();
+  }
+});
+
+window.addEventListener('online', () => {
+  console.log('[WS] Network restored — reconnecting to HealthBot...');
+  connectWebSocket();
+});
 
 function disconnectWebSocket() {
   if (state.ws) {
