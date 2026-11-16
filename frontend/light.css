@@ -1026,46 +1026,316 @@ body {
   align-items: center;
 }
 
-/* ── Responsive Refinements (Mobile / Tablet) ──────────────────────── */
+/* ── Mobile View Tabs (Hidden on Desktop) ────────────────────────── */
+.mobile-view-tabs {
+  display: none;
+}
+
+/* ── Responsive Refinements (Mobile / Phone Viewport) ──────────────── */
 @media (max-width: 900px) {
   html, body {
-    height: auto;
-    overflow-y: auto;
+    height: 100% !important;
+    height: 100dvh !important;
+    overflow: hidden !important;
+    position: fixed;
+    width: 100%;
+    margin: 0;
+    padding: 0;
   }
+
   .app-container {
-    height: auto;
-    max-height: none;
-    overflow: visible;
-    padding: 12px;
+    height: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    padding: 8px 10px 8px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
   }
+
+  /* Compact Native-Feel Mobile Navbar */
   .navbar {
-    flex-wrap: wrap;
-    gap: 10px;
+    flex: 0 0 auto !important;
+    padding: 6px 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    flex-wrap: nowrap !important;
+    border-radius: var(--radius-md) !important;
   }
-  .assistant-grid {
-    grid-template-columns: 1fr;
-    height: auto;
-    overflow: visible;
+
+  .navbar .brand {
+    gap: 8px !important;
+    flex-shrink: 0;
   }
-  .chat-card {
-    height: auto;
-    overflow: visible;
+
+  .brand-emblem {
+    width: 28px !important;
+    height: 28px !important;
   }
-  .chat-scroll {
-    height: 320px;
-    flex: none;
+
+  .brand-emblem svg {
+    width: 16px !important;
+    height: 16px !important;
   }
-  .suggestions {
-    flex-wrap: wrap;
+
+  .brand-text h1 {
+    font-size: 0.92rem !important;
   }
-  .side-col {
-    height: auto;
-    overflow: visible;
+
+  .brand-text .badge-version,
+  .brand-text .subtitle {
+    display: none !important;
   }
-  .app-footer {
-    flex-direction: column;
-    gap: 6px;
+
+  .patient-picker {
+    padding: 3px 6px !important;
+    gap: 4px !important;
+  }
+
+  .patient-picker .picker-label {
+    display: none !important;
+  }
+
+  .patient-picker select {
+    font-size: 0.72rem !important;
+    padding: 2px 4px !important;
+    max-width: 105px !important;
+  }
+
+  .system-status-pills {
+    gap: 5px !important;
+  }
+
+  .status-pill {
+    padding: 3px 8px !important;
+    font-size: 0.65rem !important;
+  }
+
+  .status-pill.nav-link {
+    display: none !important;
+  }
+
+  /* Mobile Segmented View Control */
+  .mobile-view-tabs {
+    display: flex !important;
+    background: var(--slate-100);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-md);
+    padding: 2px;
+    gap: 4px;
+    flex: 0 0 auto !important;
+  }
+
+  .view-tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--slate-600);
+    font-family: var(--font-sans);
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
     text-align: center;
-    padding-bottom: 12px;
+  }
+
+  .view-tab-btn.active {
+    background: #ffffff;
+    color: var(--slate-900);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  }
+
+  /* Assistant Grid Container on Mobile */
+  .assistant-grid {
+    flex: 1 1 0px !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    overflow: hidden !important;
+    gap: 0 !important;
+  }
+
+  /* Chat View */
+  .chat-card {
+    flex: 1 1 0px !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 8px 10px 6px !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .chat-card.mobile-view-hidden {
+    display: none !important;
+  }
+
+  .card-header {
+    flex: 0 0 auto !important;
+    padding-bottom: 4px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .card-title h2 {
+    font-size: 0.88rem !important;
+  }
+
+  .card-title p {
+    display: none !important;
+  }
+
+  .audio-state-pill {
+    padding: 2px 7px !important;
+    font-size: 0.65rem !important;
+  }
+
+  .chat-tools {
+    flex: 0 0 auto !important;
+    margin-bottom: 4px !important;
+    gap: 6px !important;
+  }
+
+  .tool-btn {
+    padding: 3px 8px !important;
+    font-size: 0.68rem !important;
+  }
+
+  /* Dynamic Chat Messages Scroll */
+  .chat-scroll {
+    flex: 1 1 0px !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow-y: auto !important;
+    padding: 8px 10px !important;
+    gap: 8px !important;
+    border-radius: var(--radius-sm) !important;
+  }
+
+  .dialogue-msg {
+    padding: 8px 10px !important;
+    font-size: 0.82rem !important;
+    line-height: 1.45 !important;
+    max-width: 90% !important;
+  }
+
+  /* Clean Single-Row Swipeable Suggestions */
+  .suggestions {
+    flex: 0 0 auto !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 5px !important;
+    margin: 4px 0 2px !important;
+    padding-bottom: 2px !important;
+    scrollbar-width: none !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .suggestions::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .chip-btn {
+    padding: 3px 8px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .chip-btn .chip-cat {
+    display: none !important;
+  }
+
+  .chip-btn .chip-label {
+    font-size: 0.68rem !important;
+  }
+
+  /* Pinned Thumb-Friendly Composer */
+  .composer {
+    flex: 0 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 4px 6px !important;
+    margin-top: 2px !important;
+    border-radius: var(--radius-lg) !important;
+    background: #ffffff !important;
+    border: 1px solid var(--card-border) !important;
+  }
+
+  .composer input {
+    font-size: 16px !important; /* Prevents iOS auto-zoom */
+    padding: 6px 4px !important;
+    min-width: 0 !important;
+  }
+
+  .composer input::placeholder {
+    font-size: 0.78rem !important;
+  }
+
+  .voice-mic-btn {
+    width: 36px !important;
+    height: 36px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .mic-inner-circle {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  .mic-inner-circle svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+
+  .btn-send {
+    padding: 6px 12px !important;
+    font-size: 0.74rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  .mic-status-row {
+    flex: 0 0 auto !important;
+    margin-top: 2px !important;
+    gap: 6px !important;
+  }
+
+  .mic-hint {
+    font-size: 0.65rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  /* Patient Record Mobile View */
+  .side-col {
+    flex: 1 1 0px !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow-y: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    padding: 4px 2px !important;
+  }
+
+  .side-col.mobile-view-hidden {
+    display: none !important;
+  }
+
+  .side-col > .glass-card {
+    padding: 12px 14px !important;
+  }
+
+  .app-footer {
+    display: none !important; /* Maximizes vertical viewport on phones */
   }
 }

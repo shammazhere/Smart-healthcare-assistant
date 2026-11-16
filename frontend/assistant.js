@@ -685,6 +685,32 @@
     send({ type: 'patient', id: el.select.value });
   });
 
+  // Mobile View Switcher (Clinical Dialogue vs. Patient Record)
+  const tabDialogue = document.getElementById('tabDialogueBtn');
+  const tabPatient = document.getElementById('tabPatientBtn');
+  const chatCardEl = document.querySelector('.chat-card');
+  const sideColEl = document.querySelector('.side-col');
+
+  if (tabDialogue && tabPatient) {
+    tabDialogue.addEventListener('click', () => {
+      tabDialogue.classList.add('active');
+      tabDialogue.setAttribute('aria-selected', 'true');
+      tabPatient.classList.remove('active');
+      tabPatient.setAttribute('aria-selected', 'false');
+      chatCardEl?.classList.remove('mobile-view-hidden');
+      sideColEl?.classList.add('mobile-view-hidden');
+    });
+
+    tabPatient.addEventListener('click', () => {
+      tabPatient.classList.add('active');
+      tabPatient.setAttribute('aria-selected', 'true');
+      tabDialogue.classList.remove('active');
+      tabDialogue.setAttribute('aria-selected', 'false');
+      sideColEl?.classList.remove('mobile-view-hidden');
+      chatCardEl?.classList.add('mobile-view-hidden');
+    });
+  }
+
   // ── Conversation mode: hands-free back-and-forth ───────────────────────────
   function noteSilence() {
     if (!state.convMode) return;

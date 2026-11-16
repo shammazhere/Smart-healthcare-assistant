@@ -59,6 +59,16 @@
       </div>
     </header>
 
+    <!-- Mobile Segmented View Control (Phone only) -->
+    <div class="mobile-view-tabs" id="mobileViewTabs" role="tablist">
+      <button type="button" class="view-tab-btn active" id="tabDialogueBtn" role="tab" aria-selected="true">
+        Clinical Dialogue
+      </button>
+      <button type="button" class="view-tab-btn" id="tabPatientBtn" role="tab" aria-selected="false">
+        Patient Record
+      </button>
+    </div>
+
     <main class="assistant-grid">
 
       <!-- Chat + voice dialogue section -->
@@ -135,7 +145,7 @@
       </section>
 
       <!-- Side panels -->
-      <aside class="side-col">
+      <aside class="side-col mobile-view-hidden">
         <!-- Patient Summary Card -->
         <article class="glass-card patient-section">
           <div class="card-header">

@@ -1058,20 +1058,81 @@ kbd {
    Responsive Mobile Adjustments
    =================================================================== */
 @media (max-width: 900px) {
+  .app-container {
+    padding: 12px 10px 24px;
+    gap: 14px;
+  }
+
   .dashboard-grid {
     grid-template-columns: 1fr;
+    gap: 14px;
   }
   
   .navbar {
     flex-direction: column;
     align-items: stretch;
+    padding: 12px 14px;
+    gap: 10px;
   }
 
   .connection-bar {
     max-width: 100%;
+    min-width: 0;
   }
 
   .system-status-pills {
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .vitals-display-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .metric-value {
+    font-size: 2.2rem;
+  }
+
+  .voice-hero {
+    padding: 12px 0 16px;
+  }
+
+  .voice-mic-btn {
+    width: 76px;
+    height: 76px;
+  }
+
+  .mic-inner-circle {
+    width: 64px;
+    height: 64px;
+  }
+
+  .mic-svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .dialogue-input-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .dialogue-input-row input {
+    font-size: 16px; /* Prevents iOS auto-zoom */
+    min-width: 0;
+  }
+
+  .dpad-controller {
+    grid-template-columns: repeat(3, 62px);
+    grid-template-rows: repeat(3, 62px);
+    gap: 8px;
+    margin: 8px auto 16px;
+  }
+
+  .diag-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
