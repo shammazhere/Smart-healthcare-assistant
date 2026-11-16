@@ -113,6 +113,37 @@ PHYSICIAN_DISCLAIMERS: dict[str, str] = {
     "ur": "میں صرف ایک ہیلتھ کیئر اسسٹنٹ ہوں، معالج (ڈاکٹر) نہیں۔ براہ کرم مناسب طبی معائنے کے لیے اپنے ڈاکٹر سے رجوع کریں۔",
 }
 
+
+def strip_physician_disclaimer(text: str) -> str:
+    """Remove physician disclaimers when asking diagnostic clarifying questions."""
+    cleaned = text
+    for d in PHYSICIAN_DISCLAIMERS.values():
+        cleaned = cleaned.replace(d, "")
+    patterns = [
+        r"[^.!?\n]*(healthcare assistant|not a physician|consult (your|a) doctor)[^.!?\n]*[.!?]?",
+        r"[^.!?।\n]*(ವೈದ್ಯನಲ್ಲ|ವೈದ್ಯರನ್ನು ಸಂಪರ್ಕಿಸಿ|ಆರೋಗ್ಯ ಸಹಾಯಕ ಮಾತ್ರ)[^.!?।\n]*[.!?।]?",
+        r"[^.!?।\n]*(चिकित्सक.*नहीं|डॉक्टर से संपर्क|स्वास्थ्य सहायक हूँ)[^.!?।\n]*[.!?।]?",
+        r"[^.!?।\n]*(மருத்துவர் அல்ல|மருத்துவரை அணுகவும்|சுகாதார உதவியாளர் மட்டுமே)[^.!?।\n]*[.!?।]?",
+        r"[^.!?।\n]*(వైద్యుడిని కాదు|వైద్యుడిని సంప్రదించండి|ఆరోగ్య సహాయకుడిని మాత్రమే)[^.!?।\n]*[.!?।]?",
+    ]
+    for pat in patterns:
+        cleaned = re.sub(pat, "", cleaned, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def is_asking_question(text: str) -> bool:
+    """Detect if the LLM output is asking a clarifying question during triage."""
+    cleaned = text.strip()
+    if "?" in cleaned or "？" in cleaned:
+        return True
+    question_cues = (
+        "೧ ರಿಂದ ೧೦", "1 ರಿಂದ 10", "1 to 10", "scale of", "rate your",
+        "ಎಷ್ಟು", "ಹೇಗಿದೆ", "ಯಾವಾಗ", "ಎಲ್ಲಿ", "ತಿಳಿಸಿ", "ಹೇಳಿ", "ಇದೆಯೇ",
+        "१ से १०", "1 से 10", "कितना", "कैसा", "कब", "कहाँ", "बताएं", "बताइए", "क्या"
+    )
+    return any(cue in cleaned for cue in question_cues)
+
+
 # ── System Prompt Template ───────────────────────────────────────────────────
 BASE_SYSTEM_PROMPT = """
 You are Baymax, a friendly, empathetic personal healthcare assistant robot designed to support patients.
@@ -122,7 +153,7 @@ Persona & Clinical Safety Rules:
 - Length: Keep every spoken response concise, helpful, and strictly under 40 words.
 - Tone: Speak in a comforting, friendly manner. Do not output internal thought notes, reasoning text, or markdown formatting.
 - Clinical Boundary: Provide general wellness information and support grounded in the patient's records; NEVER diagnose, prescribe medication, or give specific medical treatment.
-- Safety: If the patient asks for medical diagnosis, remind them you are an assistant robot, not a physician.
+- Safety: Remind the patient you are an assistant robot, not a physician, ONLY when giving final predicted advice/conclusion. NEVER state or repeat this disclaimer while asking clarifying questions.
 - Emergency: For severe symptoms or medical emergencies, immediately direct the patient to call emergency services or press their call button.
 """.strip()
 
@@ -391,10 +422,11 @@ async def generate_response_with_sources(
         f"     * Question 1: Severity on a scale of 1 to 10 or exact location of the discomfort.\n"
         f"     * Question 2: Onset, duration, and lifestyle factors (e.g. hydration, food intake, sleep hours, stress).\n"
         f"     * Question 3: Associated symptoms (e.g. fever, nausea, vomiting, dizziness, light sensitivity).\n"
-        f"   - Pinpoint & Conclusion Phase (once 2 to 4 clarifying questions have been answered across turns, or once sufficient details are provided):\n"
+        f"     * CRITICAL RULE FOR QUESTIONS: While asking clarifying questions, do NOT include ANY physician disclaimer. Do NOT say 'I am just a healthcare assistant, not a physician'. Simply ask the question warmly and concisely.\n"
+        f"   - Pinpoint & Conclusion Phase (ONLY after asking the clarifying questions across turns, or once sufficient details are provided):\n"
         f"     * Synthesize their answers and explain the pinpointed possible cause/reason clearly (e.g., tension headache from dehydration and lack of sleep, gastric irritation from oily food, muscle fatigue).\n"
         f"     * Offer gentle comfort self-care advice.\n"
-        f"     * You MUST conclude your final response with this exact disclaimer: \"{disclaimer_text}\"\n\n"
+        f"     * ONLY in this final conclusion/advice turn, conclude your response with this exact disclaimer: \"{disclaimer_text}\"\n\n"
         f"3. Language & Tone Guidelines:\n"
         f"   - Tone: Caring, empathetic, gentle, reassuring.\n"
         f"   - Language: Respond 100% in natural, fluent {target_lang_name}. Do NOT output ANY English words if language is not English.\n"
@@ -487,19 +519,24 @@ async def generate_response_with_sources(
             else:
                 reply = re.sub(r"^(Hello|Hi|Hey)?[!,\s]*(I\s+am\s+Baymax[,\s]*(your\s+personal\s+healthcare\s+assistant)?[.!?]?)?\s*", "", reply, flags=re.IGNORECASE).strip()
 
-        # If this turn pinpointed the cause / concludes assessment, ensure the physician disclaimer is present
+        # Determine if this response is a clarifying question or final conclusion
         user_turns_count = len([m for m in _history[pid] if m.get("role") == "user"])
-        cause_markers = (
-            "कारण", "ಕಾರಣ", "cause", "reason", "due to", "because of", "ಆಧಾರದ ಮೇಲೆ",
-            "उपाय", "आराम", "ವಿವರಣೆ", "காரணம்", "കാരണം"
-        )
-        is_conclusion = any(cm in reply for cm in cause_markers) or user_turns_count >= 2
-        disclaimer_markers = (
-            "सहायक हूँ", "ವೈದ್ಯನಲ್ಲ", "physician", "doctor", "चिकित्सक",
-            "மருத்துவர்", "వైద్యుడిని", "ഡോക്ടറല്ല", "डॉक्टर"
-        )
-        if is_conclusion and not any(dm in reply for dm in disclaimer_markers):
-            reply = f"{reply}\n\n{disclaimer_text}".strip()
+        is_question = is_asking_question(reply)
+
+        if is_question:
+            # While asking questions, NEVER include the physician disclaimer
+            reply = strip_physician_disclaimer(reply)
+        else:
+            # Only add disclaimer during the final conclusion/advice phase
+            cause_markers = (
+                "कारण", "ಕಾರಣ", "cause", "reason", "due to", "because of", "ಆಧಾರದ ಮೇಲೆ",
+                "उपाय", "आराम", "ವಿವರಣೆ", "காரணம்", "കാരണം"
+            )
+            is_conclusion = (user_turns_count >= 2) or any(cm in reply for cm in cause_markers)
+            if is_conclusion:
+                # Strip any malformed/duplicate disclaimer first, then cleanly append the canonical localized disclaimer
+                reply = strip_physician_disclaimer(reply)
+                reply = f"{reply}\n\n{disclaimer_text}".strip()
 
         # Update per-patient conversation history
         _history[pid].append({"role": "user", "content": user_text.strip()})
