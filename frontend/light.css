@@ -13,7 +13,6 @@
   --card-border: #e2e8f0;
   --card-border-hover: #cbd5e1;
   --card-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
-  --card-shadow-elevated: 0 4px 16px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
 
   /* Obsidian & Monochrome Primary */
   --slate-950: #020617;
@@ -51,14 +50,23 @@
   --radius-full: 9999px;
 }
 
-/* ── Base Reset & Canvas ───────────────────────────────────────────── */
+/* ── Base Reset & Scrollable Canvas ────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
+}
+
+html {
+  height: auto;
+  min-height: 100%;
 }
 
 body {
   margin: 0;
   padding: 0;
+  min-height: 100vh;
+  height: auto !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   background-color: var(--bg-canvas) !important;
   background-image: radial-gradient(circle at 50% 0%, #ffffff 0%, #f8fafc 100%) !important;
   color: var(--slate-900) !important;
@@ -67,7 +75,22 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  min-height: 100vh;
+}
+
+/* Slim Modern Scrollbars */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .app-background {
@@ -75,13 +98,15 @@ body {
 }
 
 .app-container {
-  max-width: 1380px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 18px 24px 32px;
+  padding: 16px 20px 32px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   min-height: 100vh;
+  height: auto !important;
+  overflow: visible !important;
 }
 
 /* ── Precision Navbar ──────────────────────────────────────────────── */
@@ -95,7 +120,6 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  backdrop-filter: none;
 }
 
 .navbar .brand {
@@ -280,7 +304,7 @@ body {
 /* ── Main Grid Layout ──────────────────────────────────────────────── */
 .assistant-grid {
   display: grid;
-  grid-template-columns: 1.85fr 1.15fr;
+  grid-template-columns: 1.75fr 1.25fr;
   gap: 16px;
   align-items: start;
 }
@@ -290,12 +314,14 @@ body {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--card-shadow);
-  padding: 20px;
+  padding: 18px 20px;
   position: relative;
 }
 
-.glass-card::before {
-  display: none !important;
+.chat-card {
+  display: flex;
+  flex-direction: column;
+  overflow: visible !important;
 }
 
 .card-header {
@@ -303,8 +329,8 @@ body {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--slate-100);
-  padding-bottom: 14px;
-  margin-bottom: 14px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
 }
 
 .card-title h2 {
@@ -381,7 +407,7 @@ body {
 .chat-tools {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .tool-btn {
@@ -409,26 +435,27 @@ body {
   border-color: var(--slate-900);
 }
 
-/* ── Chat Messages ─────────────────────────────────────────────────── */
+/* ── Chat Messages (Responsive Scroll Container) ───────────────────── */
 .chat-scroll {
-  height: 400px;
-  overflow-y: auto;
+  height: 310px;
+  min-height: 200px;
+  max-height: 420px;
+  overflow-y: auto !important;
   background: var(--card-bg);
   border: 1px solid var(--slate-200);
   border-radius: var(--radius-md);
-  padding: 16px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   scroll-behavior: smooth;
 }
 
 .dialogue-msg {
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: var(--radius-md);
   font-size: 0.88rem;
   line-height: 1.55;
-  box-shadow: none;
 }
 
 /* User Message: Precision Obsidian Bubble */
@@ -449,7 +476,7 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .dialogue-msg.user .msg-content {
@@ -474,7 +501,7 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
 .dialogue-msg.robot .msg-content {
@@ -504,62 +531,64 @@ body {
   display: none;
 }
 
-/* ── Guided Clinical Query Suggestions ─────────────────────────────── */
+/* ── Guided Clinical Query Suggestions (Compact Pills) ─────────────── */
 .suggestions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 8px;
-  margin-top: 12px;
-  margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
 }
 
 .chip-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-full);
+  padding: 5px 12px;
   cursor: pointer;
-  text-align: left;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .chip-btn .chip-cat {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  font-weight: 600;
+  font-size: 0.6rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   color: var(--slate-500);
 }
 
 .chip-btn .chip-label {
-  font-size: 0.76rem;
-  font-weight: 600;
+  font-size: 0.74rem;
+  font-weight: 500;
   color: var(--slate-800);
-  line-height: 1.35;
 }
 
 .chip-btn:hover {
-  background: var(--slate-50);
+  background: var(--slate-900);
   border-color: var(--slate-900);
   transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.04);
 }
 
-/* ── Composer & Audio Controls ─────────────────────────────────────── */
+.chip-btn:hover .chip-cat,
+.chip-btn:hover .chip-label {
+  color: #ffffff;
+}
+
+/* ── Composer & Audio Controls (Always In View) ─────────────────────── */
 .composer {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--card-bg);
+  background: #ffffff;
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
-  padding: 6px 8px 6px 10px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+  padding: 6px 8px 6px 12px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+  margin-top: 4px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -576,7 +605,7 @@ body {
   font-family: var(--font-sans);
   font-size: 0.88rem;
   outline: none !important;
-  padding: 8px 6px;
+  padding: 8px 4px;
 }
 
 .composer input::placeholder {
@@ -595,6 +624,7 @@ body {
   cursor: pointer;
   letter-spacing: 0.02em;
   transition: background 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-send:hover {
@@ -649,7 +679,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .audio-soundbars {
@@ -693,24 +723,24 @@ body {
 .side-col {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .pt-profile-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .pt-avatar {
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   border-radius: var(--radius-md);
   background: var(--slate-900);
   color: #ffffff;
   font-family: var(--font-mono);
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -720,7 +750,7 @@ body {
 }
 
 .pt-avatar-info .pt-name {
-  font-size: 1.12rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--slate-900);
   letter-spacing: -0.015em;
@@ -728,7 +758,7 @@ body {
 }
 
 .pt-avatar-info .pt-physician {
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   color: var(--slate-500);
   margin-top: 2px;
 }
@@ -738,7 +768,7 @@ body {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .vitals-tile {
@@ -772,7 +802,7 @@ body {
 
 /* Patient Section Blocks */
 .pt-block {
-  margin-top: 12px;
+  margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--slate-100);
 }
@@ -784,7 +814,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--slate-500);
-  margin: 0 0 8px;
+  margin: 0 0 6px;
 }
 
 /* Chips & Badges */
@@ -906,7 +936,7 @@ body {
 
 /* Emergency Contact Row */
 .pt-ec-row {
-  margin-top: 10px;
+  margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--slate-100);
   font-size: 0.72rem;
@@ -965,7 +995,7 @@ body {
   border-top: 1px solid var(--card-border);
   color: var(--slate-400);
   font-size: 0.72rem;
-  padding-top: 14px;
+  padding-top: 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -983,11 +1013,8 @@ body {
   .assistant-grid {
     grid-template-columns: 1fr;
   }
-  .suggestions {
-    grid-template-columns: 1fr;
-  }
   .chat-scroll {
-    height: 350px;
+    height: 280px;
   }
   .app-footer {
     flex-direction: column;
