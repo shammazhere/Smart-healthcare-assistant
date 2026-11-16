@@ -155,8 +155,9 @@ async def transcribe_sarvam(
 
         if transcript:
             log.info(f"[Sarvam STT] Transcribed ({detected_lang}): '{transcript}'")
-            return TranscriptionResult(transcript, detected_lang, confidence=prob, source="sarvam")
-        return None
+        else:
+            log.info(f"[Sarvam STT] Audio processed (no speech detected)")
+        return TranscriptionResult(transcript, detected_lang, confidence=prob, source="sarvam")
     except Exception as e:
         log.warning(f"[Sarvam STT Error] API call failed: {e}")
         return None
@@ -240,9 +241,9 @@ async def transcribe_async(
     """
     if is_sarvam_available():
         res = await transcribe_sarvam(pcm_bytes, sample_rate=sample_rate, language=language)
-        if res and str(res).strip():
+        if res is not None:
             return res
-        log.warning("[STT] Sarvam STT unavailable or empty — falling back to local Whisper")
+        log.warning("[STT] Sarvam STT API call failed — falling back to local Whisper")
 
     return await asyncio.to_thread(transcribe_whisper, pcm_bytes, sample_rate, channels)
 

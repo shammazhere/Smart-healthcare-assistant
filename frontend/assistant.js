@@ -680,12 +680,12 @@
       rec.lastSpeech = now;
     }
 
-    // Natural 1.5s pause detection or manual finish
-    if (rec.speech && now - rec.lastSpeech > 1500) {
+    // Snappy conversational pause detection (850ms) or manual finish
+    if (rec.speech && now - rec.lastSpeech > 850) {
       stopRecording(true);
-    } else if (!rec.speech && now - rec.startedAt > 10000) {
+    } else if (!rec.speech && now - rec.startedAt > 8000) {
       stopRecording(false);
-    } else if (now - rec.startedAt > 35000) {
+    } else if (now - rec.startedAt > 30000) {
       stopRecording(true);
     }
   }

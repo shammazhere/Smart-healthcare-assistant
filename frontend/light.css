@@ -1058,32 +1058,38 @@ body {
   /* Compact Native-Feel Mobile Navbar */
   .navbar {
     flex: 0 0 auto !important;
-    padding: 6px 10px !important;
+    padding: 6px 8px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    gap: 8px !important;
+    gap: 6px !important;
     flex-wrap: nowrap !important;
     border-radius: var(--radius-md) !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
   }
 
   .navbar .brand {
-    gap: 8px !important;
-    flex-shrink: 0;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
   }
 
   .brand-emblem {
-    width: 28px !important;
-    height: 28px !important;
+    width: 26px !important;
+    height: 26px !important;
+    flex-shrink: 0 !important;
   }
 
   .brand-emblem svg {
-    width: 16px !important;
-    height: 16px !important;
+    width: 14px !important;
+    height: 14px !important;
   }
 
   .brand-text h1 {
-    font-size: 0.92rem !important;
+    font-size: 0.88rem !important;
+    white-space: nowrap !important;
   }
 
   .brand-text .badge-version,
@@ -1092,8 +1098,13 @@ body {
   }
 
   .patient-picker {
-    padding: 3px 6px !important;
-    gap: 4px !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    max-width: 100px !important;
+    padding: 2px 4px !important;
+    gap: 2px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
   }
 
   .patient-picker .picker-label {
@@ -1101,18 +1112,32 @@ body {
   }
 
   .patient-picker select {
-    font-size: 0.72rem !important;
-    padding: 2px 4px !important;
-    max-width: 105px !important;
+    font-size: 0.7rem !important;
+    padding: 2px 2px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
   }
 
   .system-status-pills {
-    gap: 5px !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    margin-left: auto !important;
+  }
+
+  .status-pill.install-pill {
+    display: none !important; /* Hide install pill on mobile to prevent navbar overflow */
   }
 
   .status-pill {
-    padding: 3px 8px !important;
+    padding: 3px 7px !important;
     font-size: 0.65rem !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
   }
 
   .status-pill.nav-link {

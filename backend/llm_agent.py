@@ -159,7 +159,7 @@ Persona & Clinical Safety Rules:
 # ── Default Client Settings ───────────────────────────────────────────────────
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 REQUEST_TIMEOUT_SECONDS = 20.0
-MAX_OUTPUT_TOKENS = 1024
+MAX_OUTPUT_TOKENS = 2048
 DEFAULT_PATIENT_ID = os.getenv("DEFAULT_PATIENT_ID", "patient_001")
 HISTORY_TURNS = 10
 
@@ -411,29 +411,80 @@ async def generate_response_with_sources(
     disclaimer_text = PHYSICIAN_DISCLAIMERS.get(norm_lang, PHYSICIAN_DISCLAIMERS["en"])
     is_first_turn = (len(_history[pid]) == 0)
 
+    # Conversation Turn & Clinical Stage Determination
+    user_turns = [m for m in _history[pid] if m.get("role") == "user"]
+    user_turn_count = len(user_turns)
+
+    record_keywords = ["medicine", "medication", "pill", "dose", "tablet", "allergy", "allergic", "appointment", "doctor", "history", "record", "prescript", "dr."]
+    is_record_query = any(k in user_text.lower() for k in record_keywords)
+
+    symptom_cues = [
+        "headache", "head ache", "head hurts", "pain", "ache", "stomach", "fever", "dizzy", "dizziness",
+        "nausea", "cough", "throat", "vomit", "cramp", "fatigue", "tired", "weak", "burning",
+        "dard", "dukhava", "vali", "noppi", "vedana", "byatha", "jwara", "takleef"
+    ]
+    is_symptom_query = any(c in user_text.lower() for c in symptom_cues)
+    has_severity = bool(re.search(r"\b([1-9]|10)\s*(/|\s*out of|\s*to\s*10|\s*scale)?\b", user_text.lower()))
+    has_location = any(loc in user_text.lower() for loc in ["forehead", "temple", "back", "left", "right", "side", "neck", "belly", "abdomen", "chest", "leg", "arm"])
+
     system_instruction += (
-        f"BAYMAX CLINICAL ASSESSMENT & TRIAGE PROTOCOL:\n"
-        f"1. Health Record Questions (e.g. medications, appointment dates, allergies, doctor notes):\n"
-        f"   - Answer directly, helpfully, and concisely using the patient's records above.\n\n"
-        f"2. Patient Symptom Complaints & Health Concerns (e.g. pain, headache, stomach ache, fever, dizziness, nausea):\n"
-        f"   - Deliver a clear, reassuring, and structured 3-part clinical response:\n"
-        f"     * PART 1 (Probable Problem & Likely Cause): State what the probable problem is and explain what is likely causing it in plain, simple terms. Relate to their health history, daily factors (sleep, dehydration, stress, screen time), or existing conditions (like hypertension or diabetes) when relevant.\n"
-        f"     * PART 2 (Safe Temporary Relief Methods): Suggest safe, practical, non-medicinal comfort measures to temporarily relieve the symptoms (e.g., resting in a quiet dim room, applying a cool or warm compress, gentle neck stretching, sipping water, relaxation). Strictly avoid suggesting medications that conflict with their recorded allergies or chronic conditions.\n"
-        f"     * PART 3 (Serious Warning Signs & Urgent Doctor Referral): Right after the relief suggestions, state clearly: if the condition is serious, worsening, sudden and severe, or accompanied by red-flag warning signs (e.g. high fever, stiff neck, dizziness, vision blur, numbness, chest pain, or lasting beyond a few hours without relief), advise them to visit a doctor or emergency services urgently.\n"
-        f"     * Concluding Safety Disclaimer: Conclude with this exact disclaimer: \"{disclaimer_text}\"\n\n"
-        f"3. Language & Tone Guidelines:\n"
-        f"   - Tone: Caring, empathetic, gentle, reassuring, and medically responsible.\n"
-        f"   - Language: Respond 100% in natural, fluent {target_lang_name}. Do NOT output ANY English words if language is not English.\n"
-        f"   - Length: Between 60 to 95 words — concise enough for voice audio playback while delivering the cause, relief steps, and urgent doctor guidance clearly.\n"
+        f"BAYMAX CLINICAL INTERACTION PROTOCOL:\n"
+    )
+
+    if is_record_query:
+        system_instruction += (
+            f"CLINICAL MODE: Patient Record Query\n"
+            f"- Answer the patient's record question directly, concisely, and helpfully using the records above.\n"
+            f"- Length: 20 to 40 words.\n"
+        )
+    elif user_turn_count == 0 and not (has_severity and has_location):
+        system_instruction += (
+            f"CLINICAL MODE: Diagnostic Interrogation (Phase 1 — Location & Severity)\n"
+            f"The patient is reporting a health symptom. DO NOT provide a full diagnosis, probable cause, or remedies yet.\n"
+            f"- Goal: Interrogate the patient with ONE specific, caring diagnostic question to pinpoint the exact location and severity on a scale of 1 to 10.\n"
+            f"- Example: \"Where is the pain located, and how would you rate it from 1 to 10?\"\n"
+            f"- STRICT RULES:\n"
+            f"  * Ask ONLY the diagnostic question.\n"
+            f"  * DO NOT explain causes or suggest treatments yet.\n"
+            f"  * DO NOT include any physician disclaimer.\n"
+            f"  * Maximum length: Under 20 words for fast conversational voice interaction.\n"
+        )
+    elif user_turn_count == 1 and not (has_severity and has_location and len(user_text.split()) > 10):
+        system_instruction += (
+            f"CLINICAL MODE: Diagnostic Interrogation (Phase 2 — Onset & Triggers)\n"
+            f"The patient provided the location or severity. DO NOT deliver the final answer yet.\n"
+            f"- Goal: Ask ONE specific follow-up question to pinpoint onset, duration, or triggers (e.g. screen time, stress, nausea, or dizziness).\n"
+            f"- Example: \"When did it start, and have you had any screen strain, stress, or nausea?\"\n"
+            f"- STRICT RULES:\n"
+            f"  * Ask ONLY the diagnostic question.\n"
+            f"  * DO NOT explain causes or suggest treatments yet.\n"
+            f"  * DO NOT include any physician disclaimer.\n"
+            f"  * Maximum length: Under 20 words.\n"
+        )
+    else:
+        system_instruction += (
+            f"CLINICAL MODE: Final Assessment & Relief Plan (Phase 3 — Synthesis)\n"
+            f"You have gathered sufficient diagnostic details. Deliver the complete, structured clinical assessment:\n"
+            f"1. Probable Problem & Pinpointed Cause: State what the probable condition is and pinpoint the cause based on their answers, daily triggers, and recorded medical history.\n"
+            f"2. Safe Temporary Relief: Suggest safe, practical, non-medicinal comfort measures (e.g. resting in a dim room, cool compress, sipping water; strictly respecting allergies/contraindications).\n"
+            f"3. Urgent Doctor Escalation: State clearly that if the symptom is severe, worsening, or if red flags appear (fever, neck stiffness, numbness, vision changes, or no relief), they must visit a doctor urgently.\n"
+            f"4. Concluding Safety Disclaimer: Conclude with this exact disclaimer: \"{disclaimer_text}\"\n"
+            f"- Length: 55 to 80 words.\n"
+        )
+
+    system_instruction += (
+        f"\nLanguage & Tone Guidelines:\n"
+        f"- Tone: Caring, empathetic, gentle, and medically responsible.\n"
+        f"- Language: Respond 100% in natural, fluent {target_lang_name}. Do NOT output English words if language is not English.\n"
     )
 
     if is_first_turn:
         system_instruction += (
-            f"   - This is the very first turn of the conversation. You MUST start your response with: \"{intro_hint}\"\n"
+            f"- This is the very first turn of the conversation. Start your response with: \"{intro_hint}\"\n"
         )
     else:
         system_instruction += (
-            f"   - This is an ongoing conversation. Do NOT repeat your introductory greeting.\n"
+            f"- This is an ongoing conversation. Do NOT repeat your introductory greeting.\n"
         )
 
     # 4. Message History & User Message
