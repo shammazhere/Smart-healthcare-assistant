@@ -26,6 +26,7 @@ from fastapi import (
     Response,
 )
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -934,6 +935,10 @@ async def health():
 # ── Serve Frontend Web App ────────────────────────────────────────────────────
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
 if os.path.exists(frontend_dir):
+    @app.get("/", include_in_schema=False)
+    async def serve_root():
+        return FileResponse(os.path.join(frontend_dir, "assistant.html"))
+
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 
