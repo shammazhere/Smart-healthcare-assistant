@@ -127,7 +127,7 @@
   function renderOverview(p) {
     const frag = document.createDocumentFragment();
     const meta = [p.age ? p.age + ' years' : '', p.sex, p.blood_group ? 'Blood group ' + p.blood_group : '']
-      .filter(Boolean).join(' • ');
+      .filter(Boolean).join(', ');
     frag.append(h('div', 'pt-name', p.name || p.id), h('div', 'pt-meta', meta));
     if (p.primary_doctor) frag.append(h('div', 'pt-meta', 'Doctor: ' + p.primary_doctor));
 
@@ -233,7 +233,7 @@
         if (state.patientId) el.select.value = state.patientId;
         if (msg.stt && msg.tts) {
           el.engineInfo.textContent =
-            'Speech: ' + msg.stt.backend + ' ' + msg.stt.model + ' • Voice: ' + msg.tts.voice;
+            'Speech: ' + msg.stt.backend + ' (' + msg.stt.model + '), Voice: ' + msg.tts.voice;
         }
         if (!(msg.patients || []).length) {
           addSystem('No patient records found. Run: python pdf_ingest.py <file.pdf>');
@@ -285,7 +285,7 @@
         break;
       }
       case 'error':
-        addSystem('⚠️ ' + msg.message);
+        addSystem(msg.message);
         if (state.ui !== 'speaking') setState('idle');
         break;
       default:
@@ -486,12 +486,12 @@
     micStream = micSource = workletNode = muteGain = null;
     rec = null;
     el.mic.style.removeProperty('--level');
-    el.micHint.textContent = 'Tap the microphone and speak. It stops by itself when you finish talking.';
+    el.micHint.textContent = 'Tap microphone to speak, or type below. Auto-detects speech.';
     if (silent) { setState('idle'); return; }
 
     if (sendEnd) {
       send({ type: 'end' });
-      pendingUser = addMessage('user', '🎙️ …', true);
+      pendingUser = addMessage('user', 'Listening…', true);
       setState('transcribing');
     } else {
       send({ type: 'cancel' });
@@ -555,7 +555,7 @@
     state.silent = 0;
     el.convBtn.classList.toggle('on', on);
     el.convBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    el.convBtn.textContent = on ? '🗣️ Conversation mode: On' : '🗣️ Conversation mode: Off';
+    el.convBtn.textContent = on ? 'Continuous listening: On' : 'Continuous listening: Off';
     if (on) {
       if (!state.connected) {
         setConvMode(false, true);

@@ -1,67 +1,527 @@
 /* ===================================================================
-   HealthBot — Light theme. Load AFTER style.css (and assistant.css).
+   Baymax — Clean, Minimal, Aesthetic Healthcare UI
+   Linear / Apple Health inspired modern monochrome design system.
    =================================================================== */
+
 :root {
   color-scheme: light;
-  --bg-base: #f4f6fb;
-  --bg-gradient: radial-gradient(ellipse 90% 60% at 50% -15%, rgba(124, 109, 240, 0.12) 0%, #f4f6fb 70%);
+  --bg-base: #f8fafc;
+  --bg-gradient: none;
   --card-bg: #ffffff;
-  --card-border: rgba(15, 23, 42, 0.10);
-  --card-hover-border: rgba(91, 91, 214, 0.45);
-  --accent-primary: #5b5bd6;
-  --accent-glow: rgba(91, 91, 214, 0.25);
-  --accent-light: #4f46e5;
-  --red-glow: rgba(244, 63, 94, 0.25);
-  --emerald-glow: rgba(16, 185, 129, 0.2);
-  --text-main: #1c2233;
-  --text-mid: #475467;
-  --text-dim: #667085;
+  --card-border: #e2e8f0;
+  --card-hover-border: #cbd5e1;
+
+  --accent-primary: #0f172a;
+  --accent-glow: transparent;
+  --accent-light: #2563eb;
+
+  --red-heart: #ef4444;
+  --red-glow: transparent;
+  --emerald-green: #10b981;
+  --emerald-glow: transparent;
+  --amber-warn: #f59e0b;
+
+  --text-main: #0f172a;
+  --text-mid: #475569;
+  --text-dim: #94a3b8;
+
+  --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-full: 9999px;
 }
 
-.navbar, .glass-card {
+body {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  font-family: var(--font-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-background {
+  display: none !important;
+}
+
+/* ── Clean Navbar ──────────────────────────────────────────────────── */
+.navbar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
   backdrop-filter: none;
-  box-shadow: 0 2px 14px rgba(30, 40, 90, 0.07);
+  padding: 12px 20px;
 }
-.glass-card::before { display: none; }
 
-/* dark inset panels -> light inset panels */
-.connection-bar, .vital-metric-box, .ecg-container, .transcript-box, .speed-control-box,
-.diag-item, .patient-picker, .source-item { background: #f6f7fc; }
+.navbar .brand {
+  gap: 12px;
+}
 
-/* inputs */
-.ip-input-group input, .dialogue-input-row input, .composer input, .patient-picker select { color: var(--text-main); }
-.composer input, .dialogue-input-row input, .patient-picker select { background: #ffffff; }
-.composer input::placeholder, .dialogue-input-row input::placeholder { color: #98a2b3; }
-.patient-picker select option { background: #ffffff; color: var(--text-main); }
+.navbar .brand .logo-icon {
+  display: none;
+}
 
-/* pills, chips, buttons */
-.status-pill, .audio-state-pill, .finger-badge, .uptime-badge, .chip, .chip-btn,
-.preset-btn, .btn-secondary, .dpad-btn { background: #f1f3f9; }
-.dpad-btn, .preset-btn:hover, .btn-secondary:hover, .chip-btn:hover,
-.status-pill.nav-link:hover, .btn-clear:hover { color: var(--text-main); }
-.chip-btn:hover { background: #e9e8fd; }
-.btn-clear:hover { background: #e9ecf5; }
-.status-pill.online, .finger-badge.active { color: #047857; }
-.audio-state-pill.listening { color: #e11d48; }
-.audio-state-pill.thinking, .chip-warn { color: #b45309; }
-.dpad-stop { background: #fff1f3; color: #e11d48; }
-.dpad-btn:active, .dpad-btn.active, .dpad-stop:active, .dpad-stop.active { color: #ffffff; }
-.preset-btn.active { background: #e9e8fd; color: var(--accent-light); }
-.btn-connect, .btn-send, .mic-inner-circle { color: #ffffff; }
+.navbar .brand-text h1 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-.tool-btn { background: #f1f3f9; color: var(--text-mid); }
-.tool-btn:hover { background: #e9e8fd; color: var(--text-main); }
-.tool-btn.on { background: #e9e8fd; color: var(--accent-light); }
+.navbar .brand-text h1 .badge-version {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
 
-/* chat messages */
-.dialogue-msg.user { background: #eeedfd; }
-.dialogue-msg.robot { background: #e8f8f1; }
-.dialogue-msg.system-msg { background: #f6f7fc; }
+.navbar .brand-text .subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 2px;
+}
 
-/* misc */
-.bar-track, .speed-slider { background: #e3e7f1; }
-kbd { background: #ffffff; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.12); }
+/* ── Patient Picker & Status Pills ─────────────────────────────────── */
+.patient-picker {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 4px 10px;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 
-/* scrollbars */
-.chat-scroll::-webkit-scrollbar-thumb, .dialogue-scroll::-webkit-scrollbar-thumb { background: #c5cbe0; }
-.sources-list, .side-col { scrollbar-width: thin; scrollbar-color: #c5cbe0 transparent; }
+.patient-picker select {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-sm);
+  color: #0f172a;
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  outline: none;
+}
+
+.status-pill {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.status-pill.online {
+  color: #0f766e;
+}
+.status-pill.online .indicator-dot {
+  background: #10b981;
+}
+
+.status-pill.offline {
+  color: #b91c1c;
+}
+.status-pill.offline .indicator-dot {
+  background: #ef4444;
+}
+
+.status-pill.connecting {
+  color: #b45309;
+}
+.status-pill.connecting .indicator-dot {
+  background: #f59e0b;
+}
+
+.status-pill.nav-link {
+  color: #0f172a;
+  text-decoration: none;
+  font-weight: 600;
+}
+.status-pill.nav-link:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* ── Main Layout & Cards ───────────────────────────────────────────── */
+.glass-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+  backdrop-filter: none;
+}
+.glass-card::before {
+  display: none !important;
+}
+
+.card-header {
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+}
+
+.card-title h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.card-title p {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.card-icon {
+  display: none !important;
+}
+
+/* ── Audio State Pill ──────────────────────────────────────────────── */
+.audio-state-pill {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+}
+.audio-state-pill.listening {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+.audio-state-pill.listening .state-dot {
+  background: #dc2626;
+}
+.audio-state-pill.speaking {
+  color: #0f766e;
+  border-color: #99f6e4;
+  background: #f0fdfa;
+}
+.audio-state-pill.speaking .state-dot {
+  background: #0f766e;
+}
+
+/* ── Chat Tools ────────────────────────────────────────────────────── */
+.chat-tools {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tool-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tool-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.tool-btn.on {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+/* ── Chat Messages (Linear / Modern Minimal) ───────────────────────── */
+.chat-scroll {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  gap: 14px;
+}
+
+.dialogue-msg {
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  box-shadow: none;
+}
+
+/* User Message: Crisp Solid Dark */
+.dialogue-msg.user {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 14px 14px 2px 14px;
+  align-self: flex-end;
+  max-width: 82%;
+}
+
+.dialogue-msg.user .msg-author {
+  color: #94a3b8;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.dialogue-msg.user .msg-content {
+  color: #ffffff !important;
+}
+
+/* Baymax Message: Clean Subtle Gray Surface */
+.dialogue-msg.robot {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 14px 14px 14px 2px;
+  align-self: flex-start;
+  max-width: 86%;
+}
+
+.dialogue-msg.robot .msg-author {
+  color: #64748b;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.dialogue-msg.robot .msg-content {
+  color: #0f172a !important;
+}
+
+/* System Messages: Clean Centered Gray */
+.dialogue-msg.system-msg {
+  background: transparent !important;
+  border: none !important;
+  color: #94a3b8 !important;
+  font-size: 0.74rem;
+  text-align: center;
+  padding: 4px 0;
+  align-self: center;
+}
+.dialogue-msg.system-msg .msg-author {
+  display: none;
+}
+
+/* ── Suggestions Chips ─────────────────────────────────────────────── */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  margin-bottom: 14px;
+}
+
+.chip-btn {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip-btn:hover {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+/* ── Composer (Input & Controls) ───────────────────────────────────── */
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-lg);
+  padding: 6px 8px 6px 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.composer input {
+  flex: 1;
+  background: transparent !important;
+  border: none !important;
+  color: #0f172a !important;
+  font-family: var(--font-main);
+  font-size: 0.88rem;
+  outline: none !important;
+  padding: 8px 6px;
+}
+
+.composer input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.btn-send {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: var(--radius-md);
+  padding: 8px 18px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-send:hover {
+  background: #334155 !important;
+}
+
+/* ── Minimalist Microphone Button ──────────────────────────────────── */
+.voice-mic-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.ripple-ring {
+  display: none !important;
+}
+
+.mic-inner-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #0f172a !important;
+  color: #ffffff !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.voice-mic-btn.active .mic-inner-circle {
+  background: #dc2626 !important;
+  transform: scale(1.08);
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.2);
+}
+
+.mic-hint {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-top: 6px;
+  text-align: center;
+}
+
+/* ── Patient Card & Side Column ────────────────────────────────────── */
+.patient-card h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.patient-meta {
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-top: 2px;
+  margin-bottom: 12px;
+}
+
+.pt-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.pt-block h3 {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+/* Chips for allergies & conditions */
+.chip {
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+}
+
+.chip-warn {
+  background: #fef2f2 !important;
+  border: 1px solid #fecaca !important;
+  color: #991b1b !important;
+}
+
+.chip-info {
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #334155 !important;
+}
+
+.pt-block li {
+  font-size: 0.8rem;
+  color: #0f172a;
+  line-height: 1.4;
+}
+
+.pt-block li span {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+/* ── Citations / Sources ───────────────────────────────────────────── */
+.source-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+
+.source-item p {
+  color: #475569;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────── */
+.app-footer {
+  border-top: 1px solid #e2e8f0;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  padding-top: 12px;
+  display: flex;
+  justify-content: space-between;
+}

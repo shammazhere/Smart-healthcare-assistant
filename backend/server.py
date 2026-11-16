@@ -944,7 +944,7 @@ if os.path.exists(frontend_dir):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", "8765"))
+    port = int(os.getenv("PORT", "8080"))
     host = os.getenv("HOST", "0.0.0.0")
     log.info(f"Starting server on {host}:{port}")
     uvicorn.run("backend.server:app", host=host, port=port, reload=False)
