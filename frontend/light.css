@@ -1001,8 +1001,107 @@ body {
   align-items: center;
 }
 
-/* ── Responsive Refinements ────────────────────────────────────────── */
-@media (max-width: 960px) {
+/* ── Desktop Single-Screen Viewport (Zero Window Scroll Needed) ─────── */
+@media (min-width: 901px) {
+  html, body {
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden !important;
+  }
+
+  .app-container {
+    height: 100vh;
+    max-height: 100vh;
+    padding: 10px 18px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden !important;
+  }
+
+  .navbar {
+    flex: 0 0 auto;
+    padding: 8px 16px;
+  }
+
+  .assistant-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1.65fr 1.35fr;
+    gap: 12px;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .chat-card {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 16px 10px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    flex: 0 0 auto;
+    padding-bottom: 8px;
+    margin-bottom: 6px;
+  }
+
+  .chat-tools {
+    flex: 0 0 auto;
+    margin-bottom: 6px;
+  }
+
+  .chat-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    height: auto !important;
+    overflow-y: auto !important;
+    padding: 10px 12px;
+  }
+
+  .suggestions {
+    flex: 0 0 auto;
+    margin: 6px 0;
+  }
+
+  .composer {
+    flex: 0 0 auto;
+    margin-top: 2px;
+    padding: 4px 6px 4px 10px;
+  }
+
+  .mic-status-row {
+    flex: 0 0 auto;
+    margin-top: 4px;
+  }
+
+  .side-col {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto !important;
+    padding-right: 4px;
+  }
+
+  .side-col > .glass-card {
+    flex: 0 0 auto;
+  }
+
+  .app-footer {
+    flex: 0 0 auto;
+    padding-top: 4px;
+    font-size: 0.68rem;
+  }
+}
+
+/* ── Responsive Refinements (Mobile / Tablet) ──────────────────────── */
+@media (max-width: 900px) {
   .app-container {
     padding: 12px;
   }

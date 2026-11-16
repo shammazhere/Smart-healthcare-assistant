@@ -529,13 +529,46 @@
       await ensureAudio();
       stopPlayback();
       micStream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
-      if (!workletReady) {
-        const url = URL.createObjectURL(new Blob([WORKLET_CODE], { type: 'application/javascript' }));
-        await audioCtx.audioWorklet.addModule(url);
-        workletReady = true;
+
+      micSource = audioCtx.createMediaStreamSource(micStream);
+      muteGain = audioCtx.createGain();
+      muteGain.gain.value = 0;
+
+      // Try modern AudioWorklet first, fallback cleanly to ScriptProcessorNode
+      let captureNode = null;
+      if (audioCtx.audioWorklet && audioCtx.audioWorklet.addModule) {
+        try {
+          if (!workletReady) {
+            const url = URL.createObjectURL(new Blob([WORKLET_CODE], { type: 'application/javascript' }));
+            await audioCtx.audioWorklet.addModule(url);
+            workletReady = true;
+          }
+          captureNode = new AudioWorkletNode(audioCtx, 'pcm-capture');
+          captureNode.port.onmessage = (e) => onMicChunk(e.data);
+        } catch (wErr) {
+          console.warn('[AudioWorklet] Fallback to ScriptProcessorNode:', wErr);
+          captureNode = null;
+        }
       }
+
+      if (!captureNode) {
+        captureNode = audioCtx.createScriptProcessor(2048, 1, 1);
+        captureNode.onaudioprocess = (e) => {
+          onMicChunk(e.inputBuffer.getChannelData(0));
+        };
+      }
+
+      workletNode = captureNode;
+      micSource.connect(workletNode);
+      workletNode.connect(muteGain);
+      muteGain.connect(audioCtx.destination);
     } catch (e) {
       state.starting = false;
       addSystem(micErrorMessage(e));
@@ -546,21 +579,17 @@
     send({ type: 'start' });
     rec = {
       down: makeDownsampler(audioCtx.sampleRate, TARGET_RATE),
-      startedAt: performance.now(), lastSpeech: 0, speech: false, noise: [], threshold: 0.02,
+      startedAt: performance.now(),
+      lastSpeech: 0,
+      speech: false,
+      noise: [],
+      threshold: 0.005,
     };
-    micSource = audioCtx.createMediaStreamSource(micStream);
-    workletNode = new AudioWorkletNode(audioCtx, 'pcm-capture');
-    muteGain = audioCtx.createGain();
-    muteGain.gain.value = 0;
-    micSource.connect(workletNode);
-    workletNode.connect(muteGain);
-    muteGain.connect(audioCtx.destination);
-    workletNode.port.onmessage = (e) => onMicChunk(e.data);
 
     state.recording = true;
     state.starting = false;
     setState('listening');
-    el.micHint.textContent = 'Listening… speak now. Tap the microphone again to stop.';
+    el.micHint.textContent = 'Listening… speak now. Tap microphone again to finish.';
   }
 
   function onMicChunk(f32) {
@@ -568,7 +597,7 @@
     let sum = 0;
     for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
     const rms = Math.sqrt(sum / f32.length);
-    const lvl = Math.min(1, rms * 8).toFixed(2);
+    const lvl = Math.min(1, rms * 15).toFixed(2);
     el.mic.style.setProperty('--level', lvl);
     if (el.soundbars) {
       el.soundbars.classList.add('active');
@@ -576,28 +605,43 @@
     }
 
     const pcm = rec.down(f32);
-    if (pcm.length && state.ws && state.ws.readyState === WebSocket.OPEN) state.ws.send(pcm.buffer);
+    if (pcm.length && state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
+    }
 
     const now = performance.now();
-    if (rec.noise.length < 6) {
+    if (rec.noise.length < 8) {
       rec.noise.push(rms);
-      if (rec.noise.length === 6) rec.threshold = Math.min(0.05, Math.max(0.012, Math.min(...rec.noise) * 3));
+      if (rec.noise.length === 8) {
+        rec.threshold = Math.min(0.04, Math.max(0.003, Math.min(...rec.noise) * 2));
+      }
     }
-    if (rms > rec.threshold) { rec.speech = true; rec.lastSpeech = now; }
+    if (rms > rec.threshold) {
+      rec.speech = true;
+      rec.lastSpeech = now;
+    }
 
-    if (rec.speech && now - rec.lastSpeech > 750) stopRecording(true);
-    else if (!rec.speech && now - rec.startedAt > 8000) stopRecording(false);
-    else if (now - rec.startedAt > 30000) stopRecording(true);
+    // Natural 1.5s pause detection or manual finish
+    if (rec.speech && now - rec.lastSpeech > 1500) {
+      stopRecording(true);
+    } else if (!rec.speech && now - rec.startedAt > 10000) {
+      stopRecording(false);
+    } else if (now - rec.startedAt > 35000) {
+      stopRecording(true);
+    }
   }
 
   function stopRecording(sendEnd, silent) {
     if (!state.recording) return;
     state.recording = false;
     try {
-      workletNode.port.onmessage = null;
-      micSource.disconnect();
-      workletNode.disconnect();
-      muteGain.disconnect();
+      if (workletNode) {
+        if (workletNode.port) workletNode.port.onmessage = null;
+        if (workletNode.onaudioprocess) workletNode.onaudioprocess = null;
+        workletNode.disconnect();
+      }
+      if (micSource) micSource.disconnect();
+      if (muteGain) muteGain.disconnect();
     } catch (e) { /* already disconnected */ }
     if (micStream) micStream.getTracks().forEach((t) => t.stop());
     micStream = micSource = workletNode = muteGain = null;
