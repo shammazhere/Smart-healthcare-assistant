@@ -541,31 +541,15 @@
       muteGain = audioCtx.createGain();
       muteGain.gain.value = 0;
 
-      // Try modern AudioWorklet first, fallback cleanly to ScriptProcessorNode
-      let captureNode = null;
-      if (audioCtx.audioWorklet && audioCtx.audioWorklet.addModule) {
-        try {
-          if (!workletReady) {
-            const url = URL.createObjectURL(new Blob([WORKLET_CODE], { type: 'application/javascript' }));
-            await audioCtx.audioWorklet.addModule(url);
-            workletReady = true;
-          }
-          captureNode = new AudioWorkletNode(audioCtx, 'pcm-capture');
-          captureNode.port.onmessage = (e) => onMicChunk(e.data);
-        } catch (wErr) {
-          console.warn('[AudioWorklet] Fallback to ScriptProcessorNode:', wErr);
-          captureNode = null;
-        }
-      }
-
-      if (!captureNode) {
-        captureNode = audioCtx.createScriptProcessor(2048, 1, 1);
-        captureNode.onaudioprocess = (e) => {
+      // Direct, universal ScriptProcessorNode (zero blob/CSP issues, synchronous chunks)
+      const sp = audioCtx.createScriptProcessor(2048, 1, 1);
+      sp.onaudioprocess = (e) => {
+        if (state.recording) {
           onMicChunk(e.inputBuffer.getChannelData(0));
-        };
-      }
+        }
+      };
 
-      workletNode = captureNode;
+      workletNode = sp;
       micSource.connect(workletNode);
       workletNode.connect(muteGain);
       muteGain.connect(audioCtx.destination);
@@ -583,7 +567,8 @@
       lastSpeech: 0,
       speech: false,
       noise: [],
-      threshold: 0.005,
+      threshold: 0.003,
+      totalBytesSent: 0,
     };
 
     state.recording = true;
@@ -606,6 +591,7 @@
 
     const pcm = rec.down(f32);
     if (pcm.length && state.ws && state.ws.readyState === WebSocket.OPEN) {
+      rec.totalBytesSent += pcm.byteLength;
       state.ws.send(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
     }
 
@@ -634,9 +620,9 @@
   function stopRecording(sendEnd, silent) {
     if (!state.recording) return;
     state.recording = false;
+    const sentBytes = rec ? rec.totalBytesSent : 0;
     try {
       if (workletNode) {
-        if (workletNode.port) workletNode.port.onmessage = null;
         if (workletNode.onaudioprocess) workletNode.onaudioprocess = null;
         workletNode.disconnect();
       }
@@ -654,7 +640,7 @@
     el.micHint.textContent = 'Tap microphone to speak, or type below. Auto-detects speech.';
     if (silent) { setState('idle'); return; }
 
-    if (sendEnd) {
+    if (sendEnd || sentBytes >= 3200) {
       send({ type: 'end' });
       pendingUser = addMessage('user', 'Listening…', true);
       setState('transcribing');

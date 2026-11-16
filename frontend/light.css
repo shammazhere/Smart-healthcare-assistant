@@ -56,20 +56,17 @@
 }
 
 html {
-  height: auto;
-  min-height: 100%;
+  height: 100%;
 }
 
 body {
   margin: 0;
   padding: 0;
-  min-height: 100vh;
-  height: auto !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  background-color: var(--bg-canvas) !important;
-  background-image: radial-gradient(circle at 50% 0%, #ffffff 0%, #f8fafc 100%) !important;
-  color: var(--slate-900) !important;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-canvas);
+  background-image: radial-gradient(circle at 50% 0%, #ffffff 0%, #f8fafc 100%);
+  color: var(--slate-900);
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
@@ -79,8 +76,8 @@ body {
 
 /* Slim Modern Scrollbars */
 *::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
@@ -94,19 +91,20 @@ body {
 }
 
 .app-background {
-  display: none !important;
+  display: none;
 }
 
 .app-container {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 16px 20px 32px;
+  height: 100vh;
+  max-height: 100vh;
+  padding: 10px 16px 8px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-height: 100vh;
-  height: auto !important;
-  overflow: visible !important;
+  gap: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* ── Precision Navbar ──────────────────────────────────────────────── */
@@ -303,10 +301,13 @@ body {
 
 /* ── Main Grid Layout ──────────────────────────────────────────────── */
 .assistant-grid {
+  flex: 1 1 0px;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 1.75fr 1.25fr;
-  gap: 16px;
-  align-items: start;
+  grid-template-columns: 1.65fr 1.35fr;
+  gap: 12px;
+  height: 100%;
+  overflow: hidden;
 }
 
 .glass-card {
@@ -314,23 +315,27 @@ body {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--card-shadow);
-  padding: 18px 20px;
+  padding: 12px 16px 10px;
   position: relative;
+  box-sizing: border-box;
 }
 
 .chat-card {
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: visible !important;
+  overflow: hidden;
 }
 
 .card-header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--slate-100);
-  padding-bottom: 12px;
-  margin-bottom: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .card-title h2 {
@@ -405,9 +410,10 @@ body {
 
 /* ── Chat Tools ────────────────────────────────────────────────────── */
 .chat-tools {
+  flex: 0 0 auto;
   display: flex;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .tool-btn {
@@ -415,9 +421,9 @@ body {
   border: 1px solid var(--slate-200);
   color: var(--slate-700);
   font-family: var(--font-sans);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -437,17 +443,16 @@ body {
 
 /* ── Chat Messages (Responsive Scroll Container) ───────────────────── */
 .chat-scroll {
-  height: 310px;
-  min-height: 200px;
-  max-height: 420px;
-  overflow-y: auto !important;
+  flex: 1 1 0px;
+  min-height: 80px;
+  overflow-y: auto;
   background: var(--card-bg);
   border: 1px solid var(--slate-200);
   border-radius: var(--radius-md);
-  padding: 14px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   scroll-behavior: smooth;
 }
 
@@ -533,20 +538,30 @@ body {
 
 /* ── Guided Clinical Query Suggestions (Compact Pills) ─────────────── */
 .suggestions {
+  flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 6px;
-  margin: 10px 0;
+  margin: 6px 0 4px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.suggestions::-webkit-scrollbar {
+  display: none;
 }
 
 .chip-btn {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   background: var(--slate-50);
   border: 1px solid var(--slate-200);
   border-radius: var(--radius-full);
-  padding: 5px 12px;
+  padding: 4px 10px;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
@@ -562,7 +577,7 @@ body {
 }
 
 .chip-btn .chip-label {
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 500;
   color: var(--slate-800);
 }
@@ -580,15 +595,16 @@ body {
 
 /* ── Composer & Audio Controls (Always In View) ─────────────────────── */
 .composer {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: #ffffff;
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
-  padding: 6px 8px 6px 12px;
+  padding: 4px 6px 4px 10px;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
-  margin-top: 4px;
+  margin-top: 2px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -721,9 +737,17 @@ body {
 
 /* ── Executive Patient Summary Card ────────────────────────────────── */
 .side-col {
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.side-col > .glass-card {
+  flex: 0 0 auto;
 }
 
 .pt-profile-header {
@@ -992,117 +1016,26 @@ body {
 
 /* ── Footer ────────────────────────────────────────────────────────── */
 .app-footer {
+  flex: 0 0 auto;
   border-top: 1px solid var(--card-border);
   color: var(--slate-400);
-  font-size: 0.72rem;
-  padding-top: 12px;
+  font-size: 0.68rem;
+  padding-top: 4px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-/* ── Desktop Single-Screen Viewport (Zero Window Scroll Needed) ─────── */
-@media (min-width: 901px) {
-  html, body {
-    height: 100vh;
-    max-height: 100vh;
-    overflow: hidden !important;
-  }
-
-  .app-container {
-    height: 100vh;
-    max-height: 100vh;
-    padding: 10px 18px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    overflow: hidden !important;
-  }
-
-  .navbar {
-    flex: 0 0 auto;
-    padding: 8px 16px;
-  }
-
-  .assistant-grid {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: grid;
-    grid-template-columns: 1.65fr 1.35fr;
-    gap: 12px;
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .chat-card {
-    height: 100%;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 12px 16px 10px;
-    overflow: hidden;
-  }
-
-  .card-header {
-    flex: 0 0 auto;
-    padding-bottom: 8px;
-    margin-bottom: 6px;
-  }
-
-  .chat-tools {
-    flex: 0 0 auto;
-    margin-bottom: 6px;
-  }
-
-  .chat-scroll {
-    flex: 1 1 auto;
-    min-height: 0;
-    max-height: none;
-    height: auto !important;
-    overflow-y: auto !important;
-    padding: 10px 12px;
-  }
-
-  .suggestions {
-    flex: 0 0 auto;
-    margin: 6px 0;
-  }
-
-  .composer {
-    flex: 0 0 auto;
-    margin-top: 2px;
-    padding: 4px 6px 4px 10px;
-  }
-
-  .mic-status-row {
-    flex: 0 0 auto;
-    margin-top: 4px;
-  }
-
-  .side-col {
-    height: 100%;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    overflow-y: auto !important;
-    padding-right: 4px;
-  }
-
-  .side-col > .glass-card {
-    flex: 0 0 auto;
-  }
-
-  .app-footer {
-    flex: 0 0 auto;
-    padding-top: 4px;
-    font-size: 0.68rem;
-  }
-}
-
 /* ── Responsive Refinements (Mobile / Tablet) ──────────────────────── */
 @media (max-width: 900px) {
+  html, body {
+    height: auto;
+    overflow-y: auto;
+  }
   .app-container {
+    height: auto;
+    max-height: none;
+    overflow: visible;
     padding: 12px;
   }
   .navbar {
@@ -1111,13 +1044,28 @@ body {
   }
   .assistant-grid {
     grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+  .chat-card {
+    height: auto;
+    overflow: visible;
   }
   .chat-scroll {
-    height: 280px;
+    height: 320px;
+    flex: none;
+  }
+  .suggestions {
+    flex-wrap: wrap;
+  }
+  .side-col {
+    height: auto;
+    overflow: visible;
   }
   .app-footer {
     flex-direction: column;
     gap: 6px;
     text-align: center;
+    padding-bottom: 12px;
   }
 }

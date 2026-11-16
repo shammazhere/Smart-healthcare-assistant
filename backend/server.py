@@ -487,7 +487,10 @@ async def web_ws(ws: WebSocket):
 
             # 1. Handle incoming binary audio chunk from browser microphone
             if "bytes" in message and message["bytes"]:
+                prev_len = len(audio_buffer)
                 audio_buffer.extend(message["bytes"])
+                if prev_len == 0 or (len(audio_buffer) // 32000 > prev_len // 32000):
+                    log.info(f"[{client_id}] Receiving mic audio stream... buffer: {len(audio_buffer)} bytes ({len(audio_buffer)/32000:.1f}s)")
                 continue
 
             # 2. Handle incoming JSON command from assistant UI
@@ -544,7 +547,9 @@ async def web_ws(ws: WebSocket):
                     await _speak_web_baymax(ws, greeting_text, language=req_lang)
 
                 elif mtype == "end":
+                    log.info(f"[{client_id}] Received 'end' signal, buffer: {len(audio_buffer)} bytes ({len(audio_buffer)/32000:.1f}s)")
                     if len(audio_buffer) < 3200:
+                        log.warning(f"[{client_id}] Audio buffer too small ({len(audio_buffer)} bytes < 3200 bytes), sending no_speech")
                         audio_buffer.clear()
                         await ws.send_text(json.dumps({"type": "no_speech"}))
                         await ws.send_text(json.dumps({"type": "status", "state": "idle"}))
@@ -553,11 +558,13 @@ async def web_ws(ws: WebSocket):
                     await ws.send_text(json.dumps({"type": "status", "state": "transcribing"}))
                     pcm_data = bytes(audio_buffer)
                     audio_buffer.clear()
+                    log.info(f"[{client_id}] Transcribing {len(pcm_data)} bytes of audio via STT...")
 
                     try:
                         tr = await transcribe_async(pcm_data, sample_rate=SAMPLE_RATE)
                         transcript = str(tr).strip()
                         detected_lang = getattr(tr, "language", "en")
+                        log.info(f"[{client_id}] Transcription complete: '{transcript}' (lang={detected_lang})")
                     except Exception as stt_err:
                         log.error(f"[{client_id}] Web STT error: {stt_err}")
                         transcript = ""
