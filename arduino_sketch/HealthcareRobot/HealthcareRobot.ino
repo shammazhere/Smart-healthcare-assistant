@@ -40,10 +40,10 @@
 // ============================================================================
 
 // Station Mode (Connects to your existing Wi-Fi or phone hotspot)
-const char* STA_SSID         = "Realme";      // Primary Wi-Fi SSID
+const char* STA_SSID         = "Realme";      // Primary Wi-Fi SSID (Hotspot)
 const char* STA_PASSWORD     = "chollulle";   // Primary Wi-Fi Password
-const char* ALT_SSID         = "CONVERGE-1";  // Alternate Wi-Fi SSID
-const char* ALT_PASSWORD     = "12345678";    // Alternate Wi-Fi Password
+const char* ALT_SSID         = "Jeevan";      // Alternate Wi-Fi SSID
+const char* ALT_PASSWORD     = "PASSWORD";    // Alternate Wi-Fi Password
 
 // SoftAP Mode (Robot's own Hotspot — ALWAYS active as fallback at 192.168.4.1)
 const char* AP_SSID          = "HealthBot-AP";
