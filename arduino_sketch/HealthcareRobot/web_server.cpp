@@ -179,20 +179,25 @@ void webserverInit() {
 void TaskGateway(void *pvParameters) {
     (void)pvParameters;
 
-    // Parse ws://<host>:<port><path>
+    // Parse ws://<host>:<port><path> or wss://<host>:<port><path>
     String uri = AI_GATEWAY_WS;
+    bool isSSL = uri.startsWith("wss://");
     int schemeEnd = uri.indexOf("://") + 3;
     int portIndex = uri.indexOf(':', schemeEnd);
     int pathIndex = uri.indexOf('/', schemeEnd);
 
     String host = uri.substring(schemeEnd, (portIndex > 0 && portIndex < pathIndex) ? portIndex : pathIndex);
-    uint16_t port = (portIndex > 0 && portIndex < pathIndex) ? uri.substring(portIndex + 1, pathIndex).toInt() : 8080;
+    uint16_t port = (portIndex > 0 && portIndex < pathIndex) ? uri.substring(portIndex + 1, pathIndex).toInt() : (isSSL ? 443 : 8080);
     String path = (pathIndex > 0) ? uri.substring(pathIndex) : "/ws/audio";
 
-    g_gatewayClient.begin(host.c_str(), port, path.c_str());
+    if (isSSL) {
+        g_gatewayClient.beginSSL(host.c_str(), port, path.c_str());
+    } else {
+        g_gatewayClient.begin(host.c_str(), port, path.c_str());
+    }
     g_gatewayClient.onEvent(onGatewayEvent);
     g_gatewayClient.setReconnectInterval(3000);
-    Serial.printf("[AI-GW] Target: %s:%d%s\n", host.c_str(), port, path.c_str());
+    Serial.printf("[AI-GW] Target: %s://%s:%d%s\n", isSSL ? "wss" : "ws", host.c_str(), port, path.c_str());
 
     const size_t chunkSize = I2S_DMA_FRAME * (I2S_BITS / 8);
 

@@ -9,9 +9,9 @@
 #define WIFI_SSID           "Jeevan"      // ← Replace with your Wi-Fi SSID (e.g. CONVERGE-1 or phone hotspot)
 #define WIFI_PASSWORD       "PASSWORD"    // ← Replace with your Wi-Fi Password
 
-// ── AI Voice Gateway Backend (Running backend/server.py on laptop) ────────────
-#define AI_GATEWAY_WS       "ws://172.25.8.189:8080/ws/audio" // ← Your Laptop IP on Wi-Fi (172.25.8.189)
-#define DASHBOARD_URL       "http://172.25.8.189:8080"
+// ── AI Voice Gateway Backend (Hosted on Railway Cloud) ───────────────────────
+#define AI_GATEWAY_WS       "wss://smart-companion.up.railway.app/ws/audio"
+#define DASHBOARD_URL       "https://smart-companion.up.railway.app"
 #define WS_PORT             81            // Local WebSocket server port (Markus Sattler pattern from aqms)
 
 // ── I2S Audio Bus (Shared SCK & WS for Mic & Speaker) ────────────────────────
