@@ -6,8 +6,8 @@
 // ╚══════════════════════════════════════════════════════════════════════════╝
 
 // ── Wi-Fi Credentials ────────────────────────────────────────────────────────
-#define WIFI_SSID           "Jeevan"      // ← Replace with your Wi-Fi SSID (e.g. CONVERGE-1 or phone hotspot)
-#define WIFI_PASSWORD       "PASSWORD"    // ← Replace with your Wi-Fi Password
+#define WIFI_SSID           "CONVERGE-1"
+#define WIFI_PASSWORD       "12345678"
 
 // ── AI Voice Gateway Backend (Hosted on Railway Cloud) ───────────────────────
 #define AI_GATEWAY_WS       "wss://smart-companion.up.railway.app/ws/audio"
