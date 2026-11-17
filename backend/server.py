@@ -664,10 +664,13 @@ async def control_ws(ws: WebSocket):
                 t_step += 0.25
                 sim_hr = round(74.0 + 5.0 * math.sin(t_step), 1)
                 sim_spo2 = round(98.2 + 0.6 * math.cos(t_step * 0.8), 1)
+                sim_dist = round(85.0 + 20.0 * math.sin(t_step * 0.4), 1)
                 telemetry = {
                     "finger": True,
                     "hr": sim_hr,
                     "spo2": sim_spo2,
+                    "dist": sim_dist,
+                    "obstacle": sim_dist <= 15.0,
                     "audio": audio_state,
                 }
                 await ws.send_text(json.dumps(telemetry))

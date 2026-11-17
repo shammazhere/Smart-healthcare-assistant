@@ -193,6 +193,15 @@
             </div>
           </div>
 
+          <!-- HC-SR04 Obstacle Sensing Banner -->
+          <div class="obstacle-safety-bar" id="obstacleSafetyBar" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 10px 16px; border-radius: 12px; margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="obstacleIcon" style="font-size: 1.2rem;">📡</span>
+              <span style="font-size: 0.85rem; font-weight: 500;" id="obstacleDistanceText">Obstacle Distance: -- cm</span>
+            </div>
+            <span class="status-tag" id="obstacleStatusTag" style="padding: 3px 10px; border-radius: 99px; font-size: 0.75rem; font-weight: 600; background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3);">Path Clear</span>
+          </div>
+
           <!-- D-PAD Controller -->
           <div class="dpad-controller">
             <div class="dpad-cell"></div>

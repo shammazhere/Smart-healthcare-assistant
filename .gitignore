@@ -33,3 +33,6 @@ secrets.h
 *.code-workspace
 .DS_Store
 Thumbs.db
+
+# ── Reference Projects
+aqms/

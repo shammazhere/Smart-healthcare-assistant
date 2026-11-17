@@ -1,5 +1,6 @@
 #include "vitals_dsp.h"
 #include "config.h"
+#include "ultrasonic.h"
 #include "audio_i2s.h"
 #include <WiFi.h>
 #include <Wire.h>
@@ -47,7 +48,7 @@ static float calcMean(const float *buf, int n) {
 bool vitalsInit() {
     g_vitalsMutex = xSemaphoreCreateMutex();
 
-    // 1. OLED Display
+    // 1. OLED Display (Address 0x3C on GPIO 21/22)
     if (g_oled.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR)) {
         g_oled.clearDisplay();
         g_oled.setTextSize(1);
@@ -55,19 +56,19 @@ bool vitalsInit() {
         g_oled.setCursor(18, 20); g_oled.print("HealthBot OS");
         g_oled.setCursor(24, 36); g_oled.print("Booting up...");
         g_oled.display();
-        Serial.println("[OLED] SSD1306 Display OK");
+        Serial.println("[OLED] SSD1306 Display OK on GPIO 21/22");
     } else {
-        Serial.println("[WARN] SSD1306 OLED not found on GPIO 8/9");
+        Serial.println("[WARN] SSD1306 OLED not found on GPIO 21/22");
     }
 
-    // 2. MAX30102 PPG Sensor
+    // 2. MAX30102 PPG Sensor (Address 0x57 on GPIO 21/22)
     if (g_ppgSensor.begin(Wire, I2C_SPEED_FAST, MAX30102_I2C_ADDR)) {
         g_ppgSensor.setup(PPG_LED_POWER, PPG_SAMPLE_AVG, 2,
                           PPG_SAMPLE_RATE, PPG_PULSE_WIDTH, PPG_ADC_RANGE);
-        Serial.println("[PPG] MAX30102 Sensor OK");
+        Serial.println("[PPG] MAX30102 Sensor OK on GPIO 21/22");
         return true;
     } else {
-        Serial.println("[WARN] MAX30102 not detected on GPIO 8/9");
+        Serial.println("[WARN] MAX30102 not detected on GPIO 21/22");
         return false;
     }
 }
@@ -156,7 +157,6 @@ void TaskOLED(void *pvParameters) {
     (void)pvParameters;
     const TickType_t period = pdMS_TO_TICKS(50); // 20 FPS
     TickType_t lastWakeTime = xTaskGetTickCount();
-    uint8_t frameCount = 0;
     Serial.println("[TASK] OLED UI pinned to Core " + String(xPortGetCoreID()));
 
     for (;;) {
@@ -164,6 +164,12 @@ void TaskOLED(void *pvParameters) {
         xSemaphoreTake(g_vitalsMutex, portMAX_DELAY);
         vd = g_vitals;
         xSemaphoreGive(g_vitalsMutex);
+
+        ObstacleData od = {999.0f, false, 0};
+        if (g_obstacleMutex && xSemaphoreTake(g_obstacleMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            od = g_obstacle;
+            xSemaphoreGive(g_obstacleMutex);
+        }
 
         AudioState as = audioGetState();
 
@@ -173,44 +179,54 @@ void TaskOLED(void *pvParameters) {
         // Header with IP
         g_oled.setTextSize(1);
         g_oled.setCursor(0, 0);
-        g_oled.print("HealthBot  ");
+        g_oled.print("HealthBot ");
         g_oled.print(WiFi.localIP().toString());
         g_oled.drawFastHLine(0, 9, 128, SSD1306_WHITE);
 
-        // Heart Rate
-        g_oled.setCursor(0, 13);
+        // Heart Rate (Left Column)
+        g_oled.setCursor(0, 12);
         g_oled.print("HR:");
         g_oled.setTextSize(2);
-        g_oled.setCursor(0, 22);
+        g_oled.setCursor(0, 21);
         if (vd.fingerDetected && vd.isValid) g_oled.printf("%.0f", vd.heartRate);
         else g_oled.print("--");
         g_oled.setTextSize(1);
-        g_oled.setCursor(0, 40);
+        g_oled.setCursor(0, 38);
         g_oled.print("BPM");
 
         // Vertical divider
-        g_oled.drawFastVLine(60, 10, 35, SSD1306_WHITE);
+        g_oled.drawFastVLine(58, 10, 38, SSD1306_WHITE);
 
-        // SpO2
-        g_oled.setCursor(66, 13);
+        // SpO2 (Right Column)
+        g_oled.setCursor(64, 12);
         g_oled.print("SpO2:");
         g_oled.setTextSize(2);
-        g_oled.setCursor(66, 22);
+        g_oled.setCursor(64, 21);
         if (vd.fingerDetected && vd.isValid) g_oled.printf("%.0f%%", vd.spo2);
         else g_oled.print("--%");
 
-        // Status Footer
+        // Obstacle / Distance Line (y=38)
         g_oled.setTextSize(1);
-        g_oled.drawFastHLine(0, 50, 128, SSD1306_WHITE);
-        g_oled.setCursor(0, 54);
+        g_oled.setCursor(64, 38);
+        if (od.obstacleDetected) {
+            g_oled.printf("OBS! %.0fcm", od.distanceCm);
+        } else if (od.distanceCm < 400.0f) {
+            g_oled.printf("Dist:%.0fcm", od.distanceCm);
+        } else {
+            g_oled.print("Path Clr");
+        }
 
-        if      (as == AudioState::LISTENING) g_oled.print("Listening to patient...");
-        else if (as == AudioState::SPEAKING)  g_oled.print("Speaking (TTS)...");
+        // Status Footer
+        g_oled.drawFastHLine(0, 49, 128, SSD1306_WHITE);
+        g_oled.setCursor(0, 53);
+
+        if      (od.obstacleDetected)         g_oled.print("CAUTION: Obstacle Close");
+        else if (as == AudioState::LISTENING) g_oled.print("Listening (Mic active)");
+        else if (as == AudioState::SPEAKING)  g_oled.print("Speaking (Baymax TTS)");
         else if (!vd.fingerDetected)          g_oled.print("Place finger on sensor");
         else                                  g_oled.print("System Ready");
 
         g_oled.display();
-        frameCount++;
         vTaskDelayUntil(&lastWakeTime, period);
     }
 }

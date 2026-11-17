@@ -48,6 +48,10 @@ const elements = {
   speedDisplay: document.getElementById('speedDisplay'),
   uptimeBadge: document.getElementById('uptimeBadge'),
   dpadButtons: document.querySelectorAll('.dpad-btn'),
+  obstacleSafetyBar: document.getElementById('obstacleSafetyBar'),
+  obstacleDistanceText: document.getElementById('obstacleDistanceText'),
+  obstacleStatusTag: document.getElementById('obstacleStatusTag'),
+  obstacleIcon: document.getElementById('obstacleIcon'),
 };
 
 // ── Initialize App ───────────────────────────────────────────────────────────
@@ -75,10 +79,37 @@ function toggleConnection() {
   }
 }
 
-function connectWebSocket() {
-  const ip = elements.robotIpInput.value.trim() || window.location.host || 'localhost:8765';
+function resolveWsUrl(rawInput) {
+  let cleaned = (rawInput || '').trim();
+  if (!cleaned) {
+    cleaned = window.location.host || 'localhost:8080';
+  }
+  if (cleaned.startsWith('ws://') || cleaned.startsWith('wss://')) {
+    return cleaned;
+  }
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  const url = `${proto}://${ip}/ws/control`;
+  if (cleaned.startsWith('http://')) cleaned = cleaned.slice(7);
+  else if (cleaned.startsWith('https://')) cleaned = cleaned.slice(8);
+
+  if (cleaned.includes('/')) {
+    return `${proto}://${cleaned}`;
+  }
+  if (cleaned.includes(':')) {
+    const parts = cleaned.split(':');
+    const port = parts[1];
+    if (port === '81') return `${proto}://${cleaned}`;
+    return `${proto}://${cleaned}/ws/control`;
+  }
+  // If pure IP without port, default to ESP32 Markus Sattler WS port 81
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(cleaned)) {
+    return `${proto}://${cleaned}:81`;
+  }
+  return `${proto}://${cleaned}/ws/control`;
+}
+
+function connectWebSocket() {
+  const inputVal = elements.robotIpInput.value.trim() || window.location.host || 'localhost:8080';
+  const url = resolveWsUrl(inputVal);
 
   updateConnectionStatus('connecting', 'Connecting...');
   
@@ -211,6 +242,34 @@ function handleIncomingTelemetry(raw) {
     // Audio Pipeline State (0: IDLE, 1: LISTENING, 2: SPEAKING)
     if (data.audio !== undefined) {
       updateAudioState(data.audio);
+    }
+
+    // HC-SR04 Obstacle Sensing
+    if (data.dist !== undefined) {
+      const dist = parseFloat(data.dist);
+      const isObstacle = Boolean(data.obstacle);
+      if (elements.obstacleDistanceText) {
+        if (dist > 0 && dist < 400) {
+          elements.obstacleDistanceText.textContent = `Obstacle Distance: ${Math.round(dist)} cm`;
+        } else {
+          elements.obstacleDistanceText.textContent = `Path Clear (> 4 m)`;
+        }
+      }
+      if (elements.obstacleStatusTag && elements.obstacleIcon) {
+        if (isObstacle) {
+          elements.obstacleIcon.textContent = '⚠️';
+          elements.obstacleStatusTag.textContent = 'Obstacle Detected!';
+          elements.obstacleStatusTag.style.background = 'rgba(239,68,68,0.2)';
+          elements.obstacleStatusTag.style.color = '#f87171';
+          elements.obstacleStatusTag.style.borderColor = 'rgba(239,68,68,0.4)';
+        } else {
+          elements.obstacleIcon.textContent = '📡';
+          elements.obstacleStatusTag.textContent = 'Path Clear';
+          elements.obstacleStatusTag.style.background = 'rgba(16,185,129,0.15)';
+          elements.obstacleStatusTag.style.color = '#34d399';
+          elements.obstacleStatusTag.style.borderColor = 'rgba(16,185,129,0.3)';
+        }
+      }
     }
 
     // AI Transcript Message

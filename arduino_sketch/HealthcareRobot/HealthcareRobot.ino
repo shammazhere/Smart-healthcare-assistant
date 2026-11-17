@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════════════════════════════════════════╗
-// ║   HealthBot OS — ESP32-S3 Autonomous Healthcare Assistant Robot          ║
+// ║   HealthBot OS — ESP32 Autonomous Healthcare Assistant Robot             ║
 // ║   Main Sketch Entry Point                                                ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
 
@@ -10,6 +10,7 @@
 #include "config.h"
 #include "motor_driver.h"
 #include "vitals_dsp.h"
+#include "ultrasonic.h"
 #include "audio_i2s.h"
 #include "web_server.h"
 
@@ -17,10 +18,10 @@ void setup() {
     Serial.begin(115200);
     delay(400);
     Serial.println("\n\n╔══════════════════════════════════════════════╗");
-    Serial.println("║  HealthBot OS v1.0 — ESP32-S3 Medical Robot  ║");
+    Serial.println("║  HealthBot OS v1.1 — ESP32 Healthcare Robot  ║");
     Serial.println("╚══════════════════════════════════════════════╝");
 
-    // 1. Initialize I2C Bus, OLED Display & MAX30102 PPG Sensor
+    // 1. Initialize I2C Bus (SDA=21, SCL=22), OLED & MAX30102 PPG Sensor
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, 400000UL);
     vitalsInit();
 
@@ -41,37 +42,43 @@ void setup() {
         WiFi.softAP("HealthBot-AP", "healthbot123");
     }
 
-    // 3. Initialize L298N Motor Driver
+    // 3. Initialize HC-SR04 Ultrasonic Distance Sensor
+    ultrasonicInit();
+
+    // 4. Initialize L298N Motor Driver (Staged/Safe if MOTORS_ENABLED == false)
     motorInit();
 
-    // 4. Initialize I2S Full-Duplex Audio (INMP441 Mic + MAX98357A Speaker)
+    // 5. Initialize I2S Full-Duplex Audio (INMP441 Mic + MAX98357A Speaker)
     if (!audioInit()) {
         Serial.println("[WARN] I2S audio driver failed to initialize");
     }
 
-    // 5. Start Web Server & Control WebSocket
+    // 6. Start Web Server (Port 80) & Control WebSocket Server (Port 81)
     webserverInit();
 
-    // 6. Update OLED Splash Screen with IP
+    // 7. Update OLED Splash Screen with IP
     g_oled.clearDisplay();
     g_oled.setTextSize(1);
+    g_oled.setTextColor(SSD1306_WHITE);
     g_oled.setCursor(0, 0);  g_oled.print("HealthBot Ready!");
-    g_oled.setCursor(0, 14); g_oled.print("Open Dashboard at:");
+    g_oled.setCursor(0, 14); g_oled.print("Dashboard available:");
     g_oled.setCursor(0, 26); g_oled.print("http://");
     g_oled.print(WiFi.localIP().toString());
+    g_oled.setCursor(0, 40); g_oled.printf("WS Port: %u", WS_PORT);
     g_oled.display();
     delay(2000);
 
-    // 7. Launch FreeRTOS Tasks
+    // 8. Launch FreeRTOS Tasks
     // ── Core 1: Real-Time Hardware Tasks
-    xTaskCreatePinnedToCore(TaskMotor,     "Motor",     4096, nullptr, 5, nullptr, 1);
-    xTaskCreatePinnedToCore(TaskVitals,    "Vitals",    4096, nullptr, 4, nullptr, 1);
-    xTaskCreatePinnedToCore(TaskOLED,      "OLED",      3072, nullptr, 2, nullptr, 1);
+    xTaskCreatePinnedToCore(TaskMotor,      "Motor",      4096, nullptr, 5, nullptr, 1);
+    xTaskCreatePinnedToCore(TaskVitals,     "Vitals",     4096, nullptr, 4, nullptr, 1);
+    xTaskCreatePinnedToCore(TaskUltrasonic, "Ultrasonic", 3072, nullptr, 3, nullptr, 1);
+    xTaskCreatePinnedToCore(TaskOLED,       "OLED",       3072, nullptr, 2, nullptr, 1);
 
     // ── Core 0: Network & Audio Streaming Tasks
-    xTaskCreatePinnedToCore(TaskAudio,     "AudioDMA",  8192, nullptr, 4, nullptr, 0);
-    xTaskCreatePinnedToCore(TaskGateway,   "AIGateway", 8192, nullptr, 3, nullptr, 0);
-    xTaskCreatePinnedToCore(TaskTelemetry, "Telemetry", 6144, nullptr, 1, nullptr, 0);
+    xTaskCreatePinnedToCore(TaskAudio,      "AudioDMA",   8192, nullptr, 4, nullptr, 0);
+    xTaskCreatePinnedToCore(TaskGateway,    "AIGateway",  8192, nullptr, 3, nullptr, 0);
+    xTaskCreatePinnedToCore(TaskTelemetry,  "Telemetry",  6144, nullptr, 1, nullptr, 0);
 
     Serial.println("[MAIN] All FreeRTOS tasks active — Robot operational.");
 }
