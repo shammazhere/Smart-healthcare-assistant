@@ -8,22 +8,14 @@ void motorInit() {
     g_motorQueue = xQueueCreate(5, sizeof(MotorCmd));
 
 #if MOTORS_ENABLED
-    pinMode(MOTOR_IN1, OUTPUT); pinMode(MOTOR_IN2, OUTPUT);
-    pinMode(MOTOR_IN3, OUTPUT); pinMode(MOTOR_IN4, OUTPUT);
-    digitalWrite(MOTOR_IN1, LOW); digitalWrite(MOTOR_IN2, LOW);
-    digitalWrite(MOTOR_IN3, LOW); digitalWrite(MOTOR_IN4, LOW);
+    pinMode(MOTOR_IN1, OUTPUT);
+    pinMode(MOTOR_IN2, OUTPUT);
+    pinMode(MOTOR_IN3, OUTPUT);
+    pinMode(MOTOR_IN4, OUTPUT);
 
-    // Support both ESP32 Core 2.x and Core 3.x
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
-    ledcAttach(MOTOR_ENA, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-    ledcAttach(MOTOR_ENB, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-#else
-    ledcSetup(0, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-    ledcSetup(1, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-    ledcAttachPin(MOTOR_ENA, 0);
-    ledcAttachPin(MOTOR_ENB, 1);
-#endif
-    Serial.println("[MOTOR] L298N Initialized (Hardware Active)");
+    motorStop();
+    Serial.printf("[MOTOR] L298N Initialized (4-wire jumper mode: IN1=%d, IN2=%d, IN3=%d, IN4=%d)\n",
+                  MOTOR_IN1, MOTOR_IN2, MOTOR_IN3, MOTOR_IN4);
 #else
     Serial.println("[MOTOR] Hardware driver is staged (MOTORS_ENABLED = false). Commands are simulated safely.");
 #endif
@@ -31,15 +23,15 @@ void motorInit() {
 
 void motorStop() {
 #if MOTORS_ENABLED
-    digitalWrite(MOTOR_IN1, HIGH); digitalWrite(MOTOR_IN2, HIGH);
-    digitalWrite(MOTOR_IN3, HIGH); digitalWrite(MOTOR_IN4, HIGH);
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
-    ledcWrite(MOTOR_ENA, 0);
-    ledcWrite(MOTOR_ENB, 0);
-#else
-    ledcWrite(0, 0);
-    ledcWrite(1, 0);
-#endif
+    // Pull all motor inputs LOW to stop rotation cleanly
+    analogWrite(MOTOR_IN1, 0);
+    analogWrite(MOTOR_IN2, 0);
+    analogWrite(MOTOR_IN3, 0);
+    analogWrite(MOTOR_IN4, 0);
+    digitalWrite(MOTOR_IN1, LOW);
+    digitalWrite(MOTOR_IN2, LOW);
+    digitalWrite(MOTOR_IN3, LOW);
+    digitalWrite(MOTOR_IN4, LOW);
 #endif
 }
 
@@ -59,29 +51,48 @@ void motorApply(const MotorCmd &cmd) {
     }
 
 #if MOTORS_ENABLED
-    bool leftFwd = true, rightFwd = true;
+    uint8_t spL = cmd.speedL > 0 ? cmd.speedL : 200;
+    uint8_t spR = cmd.speedR > 0 ? cmd.speedR : 200;
+
     switch (cmd.dir) {
-        case MotorDir::FORWARD:   leftFwd = true;  rightFwd = true;  break;
-        case MotorDir::BACKWARD:  leftFwd = false; rightFwd = false; break;
-        case MotorDir::LEFT:      leftFwd = false; rightFwd = true;  break;
-        case MotorDir::RIGHT:     leftFwd = true;  rightFwd = false; break;
-        default: motorStop(); return;
+        case MotorDir::FORWARD:
+            // Left forward, Right forward
+            analogWrite(MOTOR_IN1, spL);
+            digitalWrite(MOTOR_IN2, LOW);
+            analogWrite(MOTOR_IN3, spR);
+            digitalWrite(MOTOR_IN4, LOW);
+            break;
+
+        case MotorDir::BACKWARD:
+            // Left reverse, Right reverse
+            digitalWrite(MOTOR_IN1, LOW);
+            analogWrite(MOTOR_IN2, spL);
+            digitalWrite(MOTOR_IN3, LOW);
+            analogWrite(MOTOR_IN4, spR);
+            break;
+
+        case MotorDir::LEFT:
+            // Spin Left: Left reverse, Right forward
+            digitalWrite(MOTOR_IN1, LOW);
+            analogWrite(MOTOR_IN2, spL);
+            analogWrite(MOTOR_IN3, spR);
+            digitalWrite(MOTOR_IN4, LOW);
+            break;
+
+        case MotorDir::RIGHT:
+            // Spin Right: Left forward, Right reverse
+            analogWrite(MOTOR_IN1, spL);
+            digitalWrite(MOTOR_IN2, LOW);
+            digitalWrite(MOTOR_IN3, LOW);
+            analogWrite(MOTOR_IN4, spR);
+            break;
+
+        case MotorDir::STOP:
+        default:
+            motorStop();
+            break;
     }
-    digitalWrite(MOTOR_IN1, leftFwd ? HIGH : LOW);
-    digitalWrite(MOTOR_IN2, leftFwd ? LOW  : HIGH);
-    digitalWrite(MOTOR_IN3, rightFwd ? HIGH : LOW);
-    digitalWrite(MOTOR_IN4, rightFwd ? LOW  : HIGH);
-
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
-    ledcWrite(MOTOR_ENA, cmd.speedL);
-    ledcWrite(MOTOR_ENB, cmd.speedR);
 #else
-    ledcWrite(0, cmd.speedL);
-    ledcWrite(1, cmd.speedR);
-#endif
-
-#else
-    // Simulated logging when hardware driver is not connected
     if (cmd.dir != MotorDir::STOP) {
         const char *dirStr = (cmd.dir == MotorDir::FORWARD) ? "FWD" :
                              (cmd.dir == MotorDir::BACKWARD) ? "BACK" :

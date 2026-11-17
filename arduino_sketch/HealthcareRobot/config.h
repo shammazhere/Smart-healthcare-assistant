@@ -39,18 +39,13 @@
 #define OBSTACLE_LIMIT_CM   15.0f // Obstacle proximity safety limit in cm
 
 // ── L298N Dual H-Bridge Motor Driver ─────────────────────────────────────────
-// Set to true only AFTER physically connecting the L298N driver
-#define MOTORS_ENABLED      false
+#define MOTORS_ENABLED      true
 
-// Safe GPIOs for standard ESP32 (Avoids internal SPI flash pins GPIO 6..11)
+// 4-wire L298N Control (Jumpers kept on ENA & ENB)
 #define MOTOR_IN1           13   // Left Motor Direction 1
-#define MOTOR_IN2           12   // Left Motor Direction 2
-#define MOTOR_IN3           14   // Right Motor Direction 1
+#define MOTOR_IN2           14   // Left Motor Direction 2
+#define MOTOR_IN3           32   // Right Motor Direction 1
 #define MOTOR_IN4           23   // Right Motor Direction 2
-#define MOTOR_ENA           4    // Left Motor PWM (Speed)
-#define MOTOR_ENB           5    // Right Motor PWM (Speed)
-#define MOTOR_PWM_FREQ      5000
-#define MOTOR_PWM_RES       8    // 8-bit resolution (0 to 255)
 #define MOTOR_WATCHDOG_MS   500  // Fail-safe: Auto-stop if no command received for 500ms
 
 // ── MAX30102 Optical PPG Settings ────────────────────────────────────────────
